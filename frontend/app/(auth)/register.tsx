@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, typography, spacing, radius } from '@/constants/theme';
 
 export default function RegisterScreen() {
@@ -56,7 +57,7 @@ export default function RegisterScreen() {
         <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="Go back">
-            <Text style={styles.backArrow}>←</Text>
+            <Ionicons name="chevron-back" size={28} color={colors.primary} />
           </TouchableOpacity>
 
           <View style={styles.progressRow}>
@@ -177,7 +178,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   scroll: { flexGrow: 1, padding: spacing.lg },
   backBtn: { marginBottom: spacing.md },
-  backArrow: { ...typography.headlineSm, color: colors.primary },
   progressRow: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.xs },
   step: {
     flex: 1,

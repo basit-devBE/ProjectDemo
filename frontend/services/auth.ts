@@ -1,6 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8001';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080';
+
+console.log('[Auth] API base URL:', BASE_URL);
 
 const KEYS = {
   accessToken: 'access_token',
@@ -39,14 +41,26 @@ export interface LoginPayload {
 }
 
 async function request<T>(path: string, options: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  });
+  const url = `${BASE_URL}${path}`;
+  console.log(`[Auth] ${options.method ?? 'GET'} ${url}`);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+    });
+  } catch (networkErr) {
+    console.error('[Auth] Network error:', networkErr);
+    throw { status: 0, message: 'Cannot reach server. Is it running?' };
+  }
+
+  console.log(`[Auth] Response ${res.status} ${res.statusText}`);
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw { status: res.status, message: body.message ?? 'Request failed' };
+    console.error('[Auth] Error body:', body);
+    throw { status: res.status, message: body.message ?? `Request failed (${res.status})` };
   }
 
   return res.json();

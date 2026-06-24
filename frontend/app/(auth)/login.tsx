@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '@/context/AuthContext';
 import { colors, typography, spacing, radius } from '@/constants/theme';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'not set';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -23,17 +27,29 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    Alert.alert('Debug: API URL', API_URL);
+  }, []);
+
   async function handleLogin() {
     setError('');
+    Alert.alert('Debug: Login pressed', `Email: ${email}`);
     if (!email || !password) {
       setError('Please fill in all fields.');
       return;
     }
     setIsLoading(true);
+    console.log('[Login] Attempting login for:', email);
     try {
       await login({ email: email.trim().toLowerCase(), password });
-    } catch (e: any) {
-      setError(e.status === 401 ? 'Invalid email or password.' : 'Something went wrong. Try again.');
+      console.log('[Login] Login succeeded');
+      Alert.alert('Debug: Login succeeded');
+    } catch (e: unknown) {
+      const err = e as { status?: number; message?: string };
+      console.error('[Login] Login failed:', err);
+      const message = err.message ?? 'Something went wrong. Try again.';
+      Alert.alert('Debug: Login failed', `Status: ${err.status ?? 'none'}\nMessage: ${message}`);
+      setError(err.status === 401 ? 'Invalid email or password.' : message);
     } finally {
       setIsLoading(false);
     }
@@ -45,7 +61,7 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="Go back">
-            <Text style={styles.backArrow}>←</Text>
+            <Ionicons name="chevron-back" size={28} color={colors.primary} />
           </TouchableOpacity>
 
           <View style={styles.header}>
@@ -63,7 +79,7 @@ export default function LoginScreen() {
             <View style={styles.field}>
               <Text style={styles.label}>Email Address</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>✉</Text>
+                <Ionicons name="mail-outline" size={20} color={colors.outline} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={email}
@@ -81,7 +97,7 @@ export default function LoginScreen() {
             <View style={styles.field}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
-                <Text style={styles.inputIcon}>🔒</Text>
+                <Ionicons name="lock-closed-outline" size={20} color={colors.outline} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={password}
@@ -132,7 +148,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
             <TouchableOpacity onPress={() => router.push('/(auth)/register')} accessibilityLabel="Sign up">
               <Text style={styles.footerLink}>Sign Up</Text>
             </TouchableOpacity>
@@ -148,7 +164,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   scroll: { flexGrow: 1, padding: spacing.lg },
   backBtn: { marginBottom: spacing.lg },
-  backArrow: { ...typography.headlineSm, color: colors.primary },
   header: { marginBottom: spacing.xl },
   title: { ...typography.headlineLg, color: colors.primary, marginBottom: spacing.sm },
   subtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant },
@@ -172,7 +187,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceCard,
     height: 52,
   },
-  inputIcon: { marginRight: spacing.sm, fontSize: 16 },
+  inputIcon: { marginRight: spacing.sm },
   input: { flex: 1, ...typography.bodyMd, color: colors.onSurface },
   toggleText: { ...typography.labelMd, color: colors.tertiary },
   forgotLink: { alignSelf: 'flex-end' },

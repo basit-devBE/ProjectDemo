@@ -73,7 +73,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function login(payload: LoginPayload) {
+    console.log('[AuthContext] login() called');
     const data = await apiLogin(payload);
+    console.log('[AuthContext] login() success, user:', data.user.email);
     dispatch({ type: 'AUTHENTICATED', user: data.user, accessToken: data.accessToken });
     router.replace('/(app)');
   }

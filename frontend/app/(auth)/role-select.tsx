@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '@/context/AuthContext';
 import { type UserRole } from '@/services/auth';
 import { colors, typography, spacing, radius } from '@/constants/theme';
@@ -62,9 +63,10 @@ export default function RoleSelectScreen() {
         password: params.password,
         role: selectedRole,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const err = e as { status?: number };
       setError(
-        e.status === 409
+        err.status === 409
           ? 'An account with this email already exists.'
           : 'Something went wrong. Please try again.'
       );
@@ -78,7 +80,7 @@ export default function RoleSelectScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
 
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="Go back">
-          <Text style={styles.backArrow}>←</Text>
+          <Ionicons name="chevron-back" size={28} color={colors.primary} />
         </TouchableOpacity>
 
         <View style={styles.progressRow}>
@@ -125,7 +127,7 @@ export default function RoleSelectScreen() {
                 </Text>
                 {isSelected && (
                   <View style={styles.checkmark}>
-                    <Text style={styles.checkmarkText}>✓</Text>
+                    <Ionicons name="checkmark" size={16} color={colors.onPrimary} />
                   </View>
                 )}
               </TouchableOpacity>
@@ -155,7 +157,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   scroll: { flexGrow: 1, padding: spacing.lg },
   backBtn: { marginBottom: spacing.md },
-  backArrow: { ...typography.headlineSm, color: colors.primary },
   progressRow: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.xs },
   step: {
     flex: 1,
@@ -214,7 +215,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkmarkText: { color: colors.onPrimary, fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   primaryBtn: {
     backgroundColor: colors.secondary,
     borderRadius: radius.md,
