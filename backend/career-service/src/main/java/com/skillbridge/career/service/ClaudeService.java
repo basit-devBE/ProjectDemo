@@ -34,7 +34,9 @@ public class ClaudeService {
             a valid JSON array of milestone objects with exactly these fields:
             semester (int 1-8), title (string), description (string),
             milestoneType (one of: SKILL, PROJECT, CERT, EXPERIENCE), displayOrder (int).
-            Generate 4-6 milestones per semester covering the full degree.
+            Generate exactly 3 milestones per semester. Only include semesters the student
+            has not yet completed: Level 100 starts at semester 1, Level 200 at semester 3,
+            Level 300 at semester 5, Level 400 at semester 7.
             No preamble. No markdown. Valid JSON only.
             """;
 
@@ -93,7 +95,11 @@ public class ClaudeService {
         }
 
         try {
-            return objectMapper.readValue(rawJson, new TypeReference<List<MilestoneTemplate>>() {});
+            String json = rawJson.strip();
+            if (json.startsWith("```")) {
+                json = json.replaceFirst("^```[a-zA-Z]*\\r?\\n?", "").replaceFirst("\\r?\\n?```$", "").strip();
+            }
+            return objectMapper.readValue(json, new TypeReference<List<MilestoneTemplate>>() {});
         } catch (JsonProcessingException e) {
             log.error("Failed to parse Claude JSON response: {}", rawJson, e);
             throw new AiServiceException("AI service returned invalid response");

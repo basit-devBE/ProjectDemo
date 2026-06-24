@@ -30,6 +30,10 @@ anthropic:
   model: claude-sonnet-4-6
   max-tokens: 4096
 
+claude:
+  connect-timeout-ms: 15000
+  read-timeout-ms: 120000
+
 springdoc:
   swagger-ui:
     path: /swagger-ui/index.html

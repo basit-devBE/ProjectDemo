@@ -12,7 +12,7 @@ public class RestTemplateConfig {
     @Bean
     public RestTemplate restTemplate(
             @Value("${claude.connect-timeout-ms:15000}") int connectTimeout,
-            @Value("${claude.read-timeout-ms:60000}") int readTimeout) {
+            @Value("${claude.read-timeout-ms:120000}") int readTimeout) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeout);
         factory.setReadTimeout(readTimeout);
