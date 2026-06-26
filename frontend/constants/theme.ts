@@ -1,19 +1,19 @@
 export const colors = {
-  primary: '#0F172A',
-  secondary: '#10B981',
-  tertiary: '#6366F1',
-  surface: '#F8F9FF',
+  primary: '#0F172A',       // slate-900  — headers, dark surfaces
+  secondary: '#059669',     // emerald-600 — CTAs, success, progress (slightly darker for AA contrast)
+  tertiary: '#2563EB',      // blue-600   — interactive, info, "Up Next" (replaces vivid indigo)
+  surface: '#F8FAFC',       // slate-50   — page background (neutral, no blue tint)
   surfaceCard: '#FFFFFF',
-  surfaceContainerLow: '#EFF4FF',
-  surfaceContainerHigh: '#DCE9FF',
+  surfaceContainerLow: '#F1F5F9',   // slate-100 — subtle fills
+  surfaceContainerHigh: '#E2E8F0',  // slate-200 — stronger fills
   onPrimary: '#FFFFFF',
-  onSurface: '#0B1C30',
-  onSurfaceVariant: '#45464D',
-  outline: '#76777D',
-  outlineVariant: '#C6C6CD',
-  error: '#BA1A1A',
-  errorContainer: '#FFDAD6',
-  success: '#10B981',
+  onSurface: '#0F172A',             // slate-900 — primary text
+  onSurfaceVariant: '#475569',      // slate-600 — secondary text
+  outline: '#94A3B8',               // slate-400 — borders, placeholders
+  outlineVariant: '#E2E8F0',        // slate-200 — subtle dividers
+  error: '#DC2626',
+  errorContainer: '#FEE2E2',
+  success: '#059669',
 } as const;
 
 export const typography = {

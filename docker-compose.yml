@@ -53,6 +53,27 @@ services:
       postgres:
         condition: service_healthy
 
+  skill-gap-service:
+    build:
+      context: ./backend/skill-gap-service
+      dockerfile: Dockerfile
+    container_name: skillbridge-skill-gap
+    ports:
+      - "8003:8003"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      FILE_UPLOAD_DIR: /app/uploads
+      SERVER_PORT: 8003
+    volumes:
+      - skillgap_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   gateway:
     image: nginx:alpine
     container_name: skillbridge-gateway
@@ -63,6 +84,8 @@ services:
     depends_on:
       - auth-service
       - career-service
+      - skill-gap-service
 
 volumes:
   postgres_data:
+  skillgap_uploads:

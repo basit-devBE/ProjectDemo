@@ -35,11 +35,16 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="roadmap"
+        name="skill-gap"
         options={{
-          title: 'Roadmap',
+          title: 'Skills',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="map-outline" focusedName="map" color={color} focused={focused} />
+            <TabIcon
+              name="analytics-outline"
+              focusedName="analytics"
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -58,6 +63,15 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="roadmap"
+        options={{
+          title: 'Roadmap',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="map-outline" focusedName="map" color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
@@ -69,6 +83,13 @@ export default function AppLayout() {
               focused={focused}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="gap-report"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
         }}
       />
     </Tabs>
