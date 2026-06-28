@@ -20,6 +20,8 @@ jobs:
             path: backend/career-service
           - service: skill-gap-service
             path: backend/skill-gap-service
+          - service: portfolio-service
+            path: backend/portfolio-service
 
     steps:
       - uses: actions/checkout@v4

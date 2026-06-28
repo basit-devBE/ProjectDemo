@@ -21,6 +21,7 @@ services:
     build:
       context: ./backend/auth-service
       dockerfile: Dockerfile
+      network: host
     container_name: skillbridge-auth
     ports:
       - "8001:8001"
@@ -39,6 +40,7 @@ services:
     build:
       context: ./backend/career-service
       dockerfile: Dockerfile
+      network: host
     container_name: skillbridge-career
     ports:
       - "8002:8002"
@@ -57,6 +59,7 @@ services:
     build:
       context: ./backend/skill-gap-service
       dockerfile: Dockerfile
+      network: host
     container_name: skillbridge-skill-gap
     ports:
       - "8003:8003"
@@ -74,6 +77,25 @@ services:
       postgres:
         condition: service_healthy
 
+  portfolio-service:
+    build:
+      context: ./backend/portfolio-service
+      dockerfile: Dockerfile
+      network: host
+    container_name: skillbridge-portfolio
+    ports:
+      - "8004:8004"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      SERVER_PORT: 8004
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   gateway:
     image: nginx:alpine
     container_name: skillbridge-gateway
@@ -85,6 +107,7 @@ services:
       - auth-service
       - career-service
       - skill-gap-service
+      - portfolio-service
 
 volumes:
   postgres_data:

@@ -72,6 +72,20 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="portfolio"
+        options={{
+          title: 'Portfolio',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name="briefcase-outline"
+              focusedName="briefcase"
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
