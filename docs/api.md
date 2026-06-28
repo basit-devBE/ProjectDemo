@@ -241,6 +241,17 @@ Authorization: Bearer <token>
 
 ---
 
+### Delete Report
+
+```
+DELETE /skill-gap/reports/{reportId}
+Authorization: Bearer <token>
+```
+
+**Response 204** — no body. Cascades to all `skill_gaps` and `resource_recommendations` rows. Also removes the parent `cv_upload` record (metadata-only; no file stored).
+
+---
+
 ## portfolio-service — Port 8004
 
 ### Add Portfolio Item
@@ -259,32 +270,83 @@ Authorization: Bearer <token>
 }
 ```
 
-**Response 201** — returns created item with `verified: false`.
+**Response 201** — returns created item with `verified: false`, `verificationStatus: "NONE"`.
 
 ---
 
-### Get Portfolio
+### Get My Portfolio
+
+```
+GET /portfolio/mine
+Authorization: Bearer <token>
+```
+
+**Response 200** — returns all items for the authenticated student with `verificationStatus` for each item (`NONE`, `PENDING`, `APPROVED`, `REJECTED`).
+
+---
+
+### Get Public Portfolio
 
 ```
 GET /portfolio/{userId}
 ```
 
-No auth required for public portfolios. Returns all items; unverified items are hidden on public views.
+No auth required. Returns only `verified: true` items.
 
 ---
 
-### Submit for Verification
+### Update Portfolio Item
+
+```
+PUT /portfolio/items/{itemId}
+Authorization: Bearer <token>
+```
+
+**Response 200** — returns updated item.
+
+---
+
+### Delete Portfolio Item
+
+```
+DELETE /portfolio/items/{itemId}
+Authorization: Bearer <token>
+```
+
+**Response 204** — no body.
+
+---
+
+### Request AI Verification
 
 ```
 POST /portfolio/items/{itemId}/verify
 Authorization: Bearer <token>
 ```
 
-No body required. Creates a verification request with status `PENDING`.
+No body required. Calls Claude AI synchronously to assess the item. Returns the AI decision immediately.
+
+**Response 200**
+```json
+{
+  "id": "uuid",
+  "portfolioItemId": "uuid",
+  "status": "APPROVED",
+  "reviewerNote": "Clear project with a public repository and detailed description.",
+  "reviewSource": "AI",
+  "requestedAt": "2026-06-28T14:00:00Z",
+  "reviewedAt": "2026-06-28T14:00:03Z"
+}
+```
+
+`status` values: `APPROVED`, `REJECTED`, `PENDING` (fallback when Claude is unavailable).  
+`reviewSource` values: `AI`, `HUMAN`, `PENDING_FALLBACK`.
+
+**409 Conflict** — if a pending verification request already exists for this item.
 
 ---
 
-### Admin — Review Verification
+### Admin — Override Verification
 
 ```
 PATCH /portfolio/verification/{requestId}
@@ -297,6 +359,8 @@ Authorization: Bearer <token>   (ADMIN role required)
   "reviewerNote": "GitHub repo confirms this is the student's own work."
 }
 ```
+
+**Response 200** — `reviewSource` will be `"HUMAN"`.
 
 ---
 
