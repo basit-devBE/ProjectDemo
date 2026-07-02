@@ -1,11 +1,15 @@
 package com.skillbridge.portfolio.service;
 
+import com.skillbridge.portfolio.dto.request.BatchCreateItemsRequest;
+import com.skillbridge.portfolio.dto.request.ExtractUrlRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemUpdateRequest;
 import com.skillbridge.portfolio.dto.request.VerificationDecisionRequest;
+import com.skillbridge.portfolio.dto.response.ExtractedItemResponse;
 import com.skillbridge.portfolio.dto.response.PortfolioItemResponse;
 import com.skillbridge.portfolio.dto.response.ShareLinkResponse;
 import com.skillbridge.portfolio.dto.response.VerificationRequestResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,4 +33,10 @@ public interface PortfolioService {
     ShareLinkResponse generateShareLink(UUID userId, String baseUrl);
 
     List<PortfolioItemResponse> getSharePortfolio(String token);
+
+    List<PortfolioItemResponse> batchCreateItems(BatchCreateItemsRequest request, UUID userId);
+
+    List<ExtractedItemResponse> extractFromCV(MultipartFile file, UUID userId);
+
+    List<ExtractedItemResponse> extractFromUrl(ExtractUrlRequest request, UUID userId);
 }

@@ -34,6 +34,13 @@ function usePulse() {
   return anim;
 }
 
+function getPriorityColor(gapCount: number) {
+  if (gapCount >= 5) return '#DC2626';
+  if (gapCount >= 3) return '#EA580C';
+  if (gapCount >= 1) return '#CA8A04';
+  return colors.secondary;
+}
+
 function ReportRow({
   report,
   onPress,
@@ -46,19 +53,22 @@ function ReportRow({
   isDeleting: boolean;
 }) {
   const dateStr = report.createdAt
-    ? new Date(report.createdAt).toLocaleDateString()
+    ? new Date(report.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
     : '';
+  const gapColor = getPriorityColor(report.gaps.length);
 
   return (
     <TouchableOpacity style={styles.reportRow} onPress={onPress} activeOpacity={0.75}>
-      <View style={styles.reportRowIcon}>
-        <Ionicons name="document-text-outline" size={18} color={colors.secondary} />
+      <View style={[styles.reportRowIcon, { backgroundColor: `${gapColor}12` }]}>
+        <Ionicons name="analytics-outline" size={18} color={gapColor} />
       </View>
       <View style={styles.reportRowBody}>
         <Text style={styles.reportRowTitle} numberOfLines={1}>{report.targetRole}</Text>
-        <Text style={styles.reportRowMeta}>
+        <Text style={styles.reportRowMeta}>{dateStr}</Text>
+      </View>
+      <View style={[styles.gapBadge, { backgroundColor: `${gapColor}15` }]}>
+        <Text style={[styles.gapBadgeText, { color: gapColor }]}>
           {report.gaps.length} {report.gaps.length === 1 ? 'gap' : 'gaps'}
-          {dateStr ? `  ·  ${dateStr}` : ''}
         </Text>
       </View>
       <TouchableOpacity
@@ -185,7 +195,13 @@ export default function SkillGapScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Skills</Text>
+        <View style={styles.headerIconWrap}>
+          <Ionicons name="analytics" size={18} color={colors.secondary} />
+        </View>
+        <View>
+          <Text style={styles.headerTitle}>Skills</Text>
+          <Text style={styles.headerSubtitle}>Identify & close your skill gaps</Text>
+        </View>
       </View>
 
       <ScrollView
@@ -202,21 +218,28 @@ export default function SkillGapScreen() {
         {/* ── Upload section ── */}
         {isAnalysing ? (
           <Animated.View style={[styles.analysingCard, { opacity: pulseOpacity }]}>
-            <Ionicons name="sparkles-outline" size={28} color={colors.secondary} />
+            <View style={styles.analysingIconWrap}>
+              <Ionicons name="sparkles" size={26} color={colors.secondary} />
+            </View>
             <Text style={styles.analysingTitle}>Analysing your CV…</Text>
-            <Text style={styles.analysingSubtitle}>This may take 15–30 seconds</Text>
+            <Text style={styles.analysingSubtitle}>Claude AI is identifying skill gaps</Text>
+            <Text style={styles.analysingHint}>This may take 15–30 seconds</Text>
           </Animated.View>
         ) : (
           <View style={styles.uploadSection}>
-            <Text style={styles.sectionLabel}>Upload CV</Text>
+            <Text style={styles.sectionLabel}>New Analysis</Text>
 
             {/* File picker card */}
-            <TouchableOpacity style={styles.fileCard} onPress={handleBrowse} activeOpacity={0.8}>
-              <View style={styles.fileCardIcon}>
+            <TouchableOpacity
+              style={[styles.fileCard, pickedFile && styles.fileCardPicked]}
+              onPress={handleBrowse}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.fileCardIcon, pickedFile && styles.fileCardIconPicked]}>
                 <Ionicons
-                  name={pickedFile ? 'document-text' : 'document-text-outline'}
-                  size={24}
-                  color={pickedFile ? colors.secondary : colors.outline}
+                  name={pickedFile ? 'document-text' : 'cloud-upload-outline'}
+                  size={22}
+                  color={pickedFile ? colors.secondary : colors.onSurfaceVariant}
                 />
               </View>
               <View style={styles.fileCardBody}>
@@ -224,26 +247,30 @@ export default function SkillGapScreen() {
                   style={[styles.fileCardText, pickedFile && styles.fileCardTextPicked]}
                   numberOfLines={1}
                 >
-                  {pickedFile ? pickedFile.name : 'No file selected'}
+                  {pickedFile ? pickedFile.name : 'Upload your CV'}
                 </Text>
-                <Text style={styles.fileCardHint}>PDF or DOCX, max 5 MB</Text>
+                <Text style={styles.fileCardHint}>PDF or DOCX · max 5 MB</Text>
               </View>
-              <View style={styles.browseBtn}>
-                <Text style={styles.browseBtnText}>Browse</Text>
+              <View style={[styles.browseBtn, pickedFile && styles.browseBtnPicked]}>
+                <Text style={[styles.browseBtnText, pickedFile && styles.browseBtnTextPicked]}>
+                  {pickedFile ? 'Change' : 'Browse'}
+                </Text>
               </View>
             </TouchableOpacity>
 
             {/* Target role input */}
-            <Text style={styles.inputLabel}>Target Role</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="e.g. Backend Developer"
-              placeholderTextColor={colors.outline}
-              value={targetRole}
-              onChangeText={setTargetRole}
-              autoCapitalize="words"
-              returnKeyType="done"
-            />
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Target Role</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="e.g. Backend Developer"
+                placeholderTextColor={colors.outline}
+                value={targetRole}
+                onChangeText={setTargetRole}
+                autoCapitalize="words"
+                returnKeyType="done"
+              />
+            </View>
 
             {/* Analyse button */}
             <TouchableOpacity
@@ -252,6 +279,12 @@ export default function SkillGapScreen() {
               disabled={!canAnalyse}
               activeOpacity={0.85}
             >
+              <Ionicons
+                name="sparkles-outline"
+                size={16}
+                color={canAnalyse ? colors.onPrimary : colors.outline}
+                style={{ marginRight: spacing.xs }}
+              />
               <Text style={[styles.analyseBtnText, !canAnalyse && styles.analyseBtnTextDisabled]}>
                 Analyse CV
               </Text>
@@ -268,7 +301,12 @@ export default function SkillGapScreen() {
         )}
 
         {/* ── History section ── */}
-        <Text style={styles.sectionLabel}>Past Analyses</Text>
+        <View style={styles.historySectionHeader}>
+          <Text style={styles.sectionLabel}>Past Analyses</Text>
+          {reports.length > 0 && (
+            <Text style={styles.historyCount}>{reports.length}</Text>
+          )}
+        </View>
 
         {isLoadingHistory ? (
           <ActivityIndicator size="small" color={colors.secondary} style={styles.historyLoader} />
@@ -279,9 +317,11 @@ export default function SkillGapScreen() {
           </View>
         ) : reports.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Ionicons name="document-outline" size={32} color={colors.outline} />
-            <Text style={styles.emptyTitle}>No past analyses yet</Text>
-            <Text style={styles.emptySubtitle}>Upload your CV to get your first analysis</Text>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="document-text-outline" size={28} color={colors.onSurfaceVariant} />
+            </View>
+            <Text style={styles.emptyTitle}>No analyses yet</Text>
+            <Text style={styles.emptySubtitle}>Upload your CV above to identify skill gaps for your target role</Text>
           </View>
         ) : (
           <View style={styles.reportsList}>
@@ -307,18 +347,36 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     backgroundColor: colors.surfaceCard,
     borderBottomWidth: 1,
     borderBottomColor: colors.outlineVariant,
   },
+  headerIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    backgroundColor: `${colors.secondary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: {
     ...typography.headlineSm,
     color: colors.onSurface,
   },
+  headerSubtitle: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    color: colors.onSurfaceVariant,
+    marginTop: 1,
+  },
   scrollContent: {
     padding: spacing.md,
+    paddingBottom: spacing.xxl,
     gap: spacing.md,
   },
   sectionLabel: {
@@ -326,41 +384,69 @@ const styles = StyleSheet.create({
     color: colors.onSurfaceVariant,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    marginBottom: spacing.xs,
   },
 
   // ── Analysing state ──
   analysingCard: {
     backgroundColor: colors.surfaceCard,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     padding: spacing.xl,
     alignItems: 'center',
-    gap: spacing.sm,
-    borderWidth: 1,
+    gap: spacing.xs,
+    borderWidth: 1.5,
     borderColor: `${colors.secondary}30`,
   },
+  analysingIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.full,
+    backgroundColor: `${colors.secondary}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
   analysingTitle: {
-    ...typography.headlineSm,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 18,
+    lineHeight: 24,
     color: colors.onSurface,
   },
   analysingSubtitle: {
     ...typography.bodyMd,
     color: colors.onSurfaceVariant,
+    fontSize: 14,
+  },
+  analysingHint: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    color: colors.outline,
+    marginTop: 2,
   },
 
   // ── Upload section ──
   uploadSection: {
     gap: spacing.sm,
+    backgroundColor: colors.surfaceCard,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
   },
   fileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceCard,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.outlineVariant,
+    borderStyle: 'dashed',
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  fileCardPicked: {
+    borderStyle: 'solid',
+    borderColor: `${colors.secondary}50`,
+    backgroundColor: `${colors.secondary}06`,
   },
   fileCardIcon: {
     width: 40,
@@ -370,19 +456,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  fileCardIconPicked: {
+    backgroundColor: `${colors.secondary}15`,
+  },
   fileCardBody: {
     flex: 1,
     gap: 2,
   },
   fileCardText: {
     ...typography.labelMd,
-    color: colors.outline,
+    color: colors.onSurfaceVariant,
   },
   fileCardTextPicked: {
     color: colors.onSurface,
+    fontFamily: 'Inter_500Medium',
   },
   fileCardHint: {
-    ...typography.labelSm,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 11,
     color: colors.outline,
   },
   browseBtn: {
@@ -391,29 +482,42 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: radius.md,
   },
+  browseBtnPicked: {
+    backgroundColor: `${colors.secondary}15`,
+  },
   browseBtnText: {
     ...typography.labelMd,
     color: colors.onSurface,
+    fontSize: 13,
+  },
+  browseBtnTextPicked: {
+    color: colors.secondary,
+  },
+  inputGroup: {
+    gap: 6,
   },
   inputLabel: {
     ...typography.labelMd,
     color: colors.onSurface,
-    marginTop: spacing.xs,
+    fontSize: 13,
   },
   textInput: {
-    backgroundColor: colors.surfaceCard,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
     padding: spacing.md,
     ...typography.bodyMd,
     color: colors.onSurface,
+    fontSize: 15,
   },
   analyseBtn: {
     backgroundColor: colors.secondary,
     borderRadius: radius.md,
     padding: spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: spacing.xs,
   },
   analyseBtnDisabled: {
@@ -438,6 +542,21 @@ const styles = StyleSheet.create({
   },
 
   // ── History section ──
+  historySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  historyCount: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 10,
+    color: colors.onPrimary,
+    backgroundColor: colors.secondary,
+    borderRadius: radius.full,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
   historyLoader: {
     marginVertical: spacing.lg,
   },
@@ -450,14 +569,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.outlineVariant,
   },
+  emptyIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
   emptyTitle: {
-    ...typography.labelMd,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 15,
     color: colors.onSurface,
   },
   emptySubtitle: {
-    ...typography.labelSm,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
     color: colors.onSurfaceVariant,
     textAlign: 'center',
+    lineHeight: 20,
   },
   reportsList: {
     gap: spacing.sm,
@@ -469,30 +600,42 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surfaceCard,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing.md,
     gap: spacing.sm,
     borderWidth: 1,
     borderColor: colors.outlineVariant,
   },
   reportRowIcon: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: radius.md,
-    backgroundColor: `${colors.secondary}12`,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   reportRowBody: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   reportRowTitle: {
-    ...typography.labelMd,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 14,
     color: colors.onSurface,
   },
   reportRowMeta: {
-    ...typography.labelSm,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
     color: colors.onSurfaceVariant,
+  },
+  gapBadge: {
+    borderRadius: radius.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexShrink: 0,
+  },
+  gapBadgeText: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 11,
   },
 });

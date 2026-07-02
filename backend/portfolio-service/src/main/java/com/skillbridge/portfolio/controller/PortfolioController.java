@@ -1,8 +1,11 @@
 package com.skillbridge.portfolio.controller;
 
+import com.skillbridge.portfolio.dto.request.BatchCreateItemsRequest;
+import com.skillbridge.portfolio.dto.request.ExtractUrlRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemUpdateRequest;
 import com.skillbridge.portfolio.dto.request.VerificationDecisionRequest;
+import com.skillbridge.portfolio.dto.response.ExtractedItemResponse;
 import com.skillbridge.portfolio.dto.response.PortfolioItemResponse;
 import com.skillbridge.portfolio.dto.response.ShareLinkResponse;
 import com.skillbridge.portfolio.dto.response.VerificationRequestResponse;
@@ -12,9 +15,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -33,6 +38,28 @@ public class PortfolioController {
             @AuthenticationPrincipal JwtUserDetails principal) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(portfolioService.createItem(request, principal.userId()));
+    }
+
+    @PostMapping("/items/batch")
+    public ResponseEntity<List<PortfolioItemResponse>> batchCreateItems(
+            @Valid @RequestBody BatchCreateItemsRequest request,
+            @AuthenticationPrincipal JwtUserDetails principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(portfolioService.batchCreateItems(request, principal.userId()));
+    }
+
+    @PostMapping(value = "/extract", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<List<ExtractedItemResponse>> extractFromCV(
+            @RequestPart("file") MultipartFile file,
+            @AuthenticationPrincipal JwtUserDetails principal) {
+        return ResponseEntity.ok(portfolioService.extractFromCV(file, principal.userId()));
+    }
+
+    @PostMapping("/extract-url")
+    public ResponseEntity<List<ExtractedItemResponse>> extractFromUrl(
+            @Valid @RequestBody ExtractUrlRequest request,
+            @AuthenticationPrincipal JwtUserDetails principal) {
+        return ResponseEntity.ok(portfolioService.extractFromUrl(request, principal.userId()));
     }
 
     @GetMapping("/mine")

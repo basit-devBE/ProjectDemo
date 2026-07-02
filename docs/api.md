@@ -380,6 +380,73 @@ Authorization: Bearer <token>
 
 ---
 
+### Batch Create Items
+
+```
+POST /portfolio/items/batch
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "items": [
+    { "itemType": "PROJECT", "title": "E-commerce API", "description": "Spring Boot REST API", "externalUrl": "https://github.com/user/repo" },
+    { "itemType": "CERTIFICATION", "title": "AWS CCP", "description": "Cloud certification", "externalUrl": null }
+  ]
+}
+```
+
+**Response 201** — returns array of created `PortfolioItemResponse` objects. Atomic: all items saved or none.
+
+**400 Bad Request** — if `items` is empty, null, or contains more than 50 entries.
+
+---
+
+### Extract Portfolio Items from CV
+
+```
+POST /portfolio/extract
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+Upload a CV (PDF or DOCX, max 5MB). Claude AI extracts portfolio-worthy items.
+
+**Response 200**
+```json
+[
+  { "itemType": "PROJECT", "title": "E-commerce API", "description": "Spring Boot REST API", "externalUrl": "https://github.com/user/repo", "confidence": 0.9 },
+  { "itemType": "CERTIFICATION", "title": "AWS CCP", "description": "Cloud certification", "externalUrl": null, "confidence": 0.85 }
+]
+```
+
+Returns empty array `[]` if no portfolio-worthy items found. Items are NOT persisted — student must batch-save selected items via `POST /portfolio/items/batch`.
+
+**400 Bad Request** — file too large, unsupported type, or password-protected PDF.  
+**503 Service Unavailable** — Claude API unavailable.
+
+---
+
+### Extract Portfolio Items from Website URL
+
+```
+POST /portfolio/extract-url
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{ "url": "https://github.com/username" }
+```
+
+Fetches the page, Claude extracts portfolio-worthy items. Same response shape as CV extraction.
+
+**400 Bad Request** — invalid URL or non-HTML content type.  
+**502 Bad Gateway** — URL unreachable or returned non-200.  
+**503 Service Unavailable** — Claude API unavailable.
+
+---
+
 ## interview-service — Port 8005
 
 ### Start Session

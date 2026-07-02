@@ -1,5 +1,6 @@
 package com.skillbridge.portfolio.service;
 
+import com.skillbridge.portfolio.dto.request.BatchCreateItemsRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemUpdateRequest;
 import com.skillbridge.portfolio.dto.request.VerificationDecisionRequest;
@@ -41,6 +42,9 @@ class PortfolioServiceTest {
     @Mock private PortfolioLinkRepository portfolioLinkRepository;
     @Mock private ShareTokenGenerator shareTokenGenerator;
     @Mock private ClaudeVerificationService claudeVerificationService;
+    @Mock private ClaudeExtractionService claudeExtractionService;
+    @Mock private FileParserService fileParserService;
+    @Mock private WebsiteFetchService websiteFetchService;
 
     @InjectMocks private PortfolioServiceImpl portfolioService;
 
@@ -345,5 +349,66 @@ class PortfolioServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).verificationStatus()).isEqualTo("APPROVED");
+    }
+
+    // ── Batch Create ───────────────────────────────────────────────────────────
+
+    @Test
+    void batchCreateItems_happyPath_savesAllItems() {
+        PortfolioItemRequest item1 = new PortfolioItemRequest("PROJECT", "Project A", "desc A", null);
+        PortfolioItemRequest item2 = new PortfolioItemRequest("CERTIFICATION", "Cert B", null, null);
+        BatchCreateItemsRequest batchReq = new BatchCreateItemsRequest(List.of(item1, item2));
+
+        when(portfolioItemRepository.save(any())).thenAnswer(inv -> {
+            PortfolioItem saved = inv.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setCreatedAt(Instant.now());
+            saved.setUpdatedAt(Instant.now());
+            return saved;
+        });
+
+        List<PortfolioItemResponse> result = portfolioService.batchCreateItems(batchReq, userId);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).title()).isEqualTo("Project A");
+        assertThat(result.get(1).title()).isEqualTo("Cert B");
+        verify(portfolioItemRepository, times(2)).save(any());
+    }
+
+    @Test
+    void batchCreateItems_setsCorrectUserId() {
+        PortfolioItemRequest itemReq = new PortfolioItemRequest("PROJECT", "Test", null, null);
+        BatchCreateItemsRequest batchReq = new BatchCreateItemsRequest(List.of(itemReq));
+
+        when(portfolioItemRepository.save(any())).thenAnswer(inv -> {
+            PortfolioItem saved = inv.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setCreatedAt(Instant.now());
+            saved.setUpdatedAt(Instant.now());
+            return saved;
+        });
+
+        List<PortfolioItemResponse> result = portfolioService.batchCreateItems(batchReq, userId);
+
+        assertThat(result.get(0).userId()).isEqualTo(userId);
+    }
+
+    @Test
+    void batchCreateItems_allItemsReturnVerificationStatusNone() {
+        PortfolioItemRequest itemReq = new PortfolioItemRequest("PROJECT", "Test", null, null);
+        BatchCreateItemsRequest batchReq = new BatchCreateItemsRequest(List.of(itemReq));
+
+        when(portfolioItemRepository.save(any())).thenAnswer(inv -> {
+            PortfolioItem saved = inv.getArgument(0);
+            saved.setId(UUID.randomUUID());
+            saved.setCreatedAt(Instant.now());
+            saved.setUpdatedAt(Instant.now());
+            return saved;
+        });
+
+        List<PortfolioItemResponse> result = portfolioService.batchCreateItems(batchReq, userId);
+
+        assertThat(result.get(0).verificationStatus()).isEqualTo("NONE");
+        assertThat(result.get(0).verified()).isFalse();
     }
 }

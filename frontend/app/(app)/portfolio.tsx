@@ -12,7 +12,8 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '@/context/AuthContext';
 import { colors, typography, spacing, radius } from '@/constants/theme';
@@ -22,7 +23,10 @@ import {
   generateShareLink,
   getMyPortfolio,
   requestVerification,
+  extractFromCV,
+  extractFromUrl,
 } from '@/services/portfolio';
+import { setExtractedItems } from '@/services/extraction-state';
 import { type PortfolioItem } from '@/types/portfolio';
 
 const ITEM_TYPES = ['PROJECT', 'CERTIFICATION', 'PUBLICATION', 'AWARD', 'OTHER'];
@@ -202,7 +206,7 @@ function AddItemModal({
 }
 
 export default function PortfolioScreen() {
-  const { session } = useAuth();
+  const { state } = useAuth();
   const [items, setItems] = useState<PortfolioItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -210,13 +214,16 @@ export default function PortfolioScreen() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [requestingId, setRequestingId] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
+  const [showExtractModal, setShowExtractModal] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
 
   const loadItems = useCallback(async (showRefresh = false) => {
-    if (!session?.accessToken) return;
+    if (!state.accessToken) return;
     if (showRefresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const data = await getMyPortfolio(session.accessToken);
+      const data = await getMyPortfolio(state.accessToken);
       setItems(data);
     } catch {
       Alert.alert('Error', 'Failed to load portfolio items.');
@@ -224,14 +231,14 @@ export default function PortfolioScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session?.accessToken]);
+  }, [state.accessToken]);
 
   useFocusEffect(useCallback(() => { loadItems(); }, [loadItems]));
 
   async function handleAdd(itemType: string, title: string, description: string, url: string) {
-    if (!session?.accessToken) return;
+    if (!state.accessToken) return;
     try {
-      const newItem = await createPortfolioItem(session.accessToken, {
+      const newItem = await createPortfolioItem(state.accessToken, {
         itemType,
         title,
         description: description || undefined,
@@ -245,7 +252,8 @@ export default function PortfolioScreen() {
   }
 
   async function handleDelete(itemId: string) {
-    if (!session?.accessToken) return;
+    if (!state.accessToken) return;
+    const token = state.accessToken;
     Alert.alert('Delete Item', 'Are you sure you want to delete this item?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -254,7 +262,7 @@ export default function PortfolioScreen() {
         onPress: async () => {
           setDeletingId(itemId);
           try {
-            await deletePortfolioItem(session.accessToken, itemId);
+            await deletePortfolioItem(token, itemId);
             setItems(prev => prev.filter(i => i.id !== itemId));
           } catch {
             Alert.alert('Error', 'Failed to delete item.');
@@ -267,10 +275,10 @@ export default function PortfolioScreen() {
   }
 
   async function handleRequestVerification(itemId: string) {
-    if (!session?.accessToken) return;
+    if (!state.accessToken) return;
     setRequestingId(itemId);
     try {
-      await requestVerification(session.accessToken, itemId);
+      await requestVerification(state.accessToken, itemId);
       setItems(prev =>
         prev.map(i => i.id === itemId ? { ...i, verificationStatus: 'PENDING' } : i)
       );
@@ -284,15 +292,63 @@ export default function PortfolioScreen() {
   }
 
   async function handleShareLink() {
-    if (!session?.accessToken) return;
+    if (!state.accessToken) return;
     setShareLoading(true);
     try {
-      const resp = await generateShareLink(session.accessToken);
+      const resp = await generateShareLink(state.accessToken);
       Alert.alert('Share Link', resp.shareUrl, [{ text: 'OK' }]);
     } catch {
       Alert.alert('Error', 'Failed to generate share link.');
     } finally {
       setShareLoading(false);
+    }
+  }
+
+  async function handleCVUpload() {
+    if (!state.accessToken) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+
+      setShowExtractModal(false);
+      setExtracting(true);
+      const extracted = await extractFromCV(state.accessToken, result.assets[0]);
+      setExtractedItems(extracted);
+      setExtracting(false);
+      router.push('/(app)/portfolio-review');
+    } catch (err: any) {
+      setExtracting(false);
+      const msg = err?.status === 503
+        ? 'AI service unavailable. Please try again or add items manually.'
+        : err?.message ?? 'Failed to extract items from CV.';
+      Alert.alert('Error', msg);
+    }
+  }
+
+  async function handleUrlExtract() {
+    if (!state.accessToken || !urlInput.trim()) return;
+    setShowExtractModal(false);
+    setExtracting(true);
+    setUrlInput('');
+    try {
+      const extracted = await extractFromUrl(state.accessToken, urlInput.trim());
+      setExtractedItems(extracted);
+      setExtracting(false);
+      router.push('/(app)/portfolio-review');
+    } catch (err: any) {
+      setExtracting(false);
+      const msg = err?.status === 503
+        ? 'AI service unavailable. Please try again or add items manually.'
+        : err?.status === 502
+        ? 'Could not fetch content from the provided URL.'
+        : err?.message ?? 'Failed to extract items from URL.';
+      Alert.alert('Error', msg);
     }
   }
 
@@ -311,6 +367,14 @@ export default function PortfolioScreen() {
             ) : (
               <Ionicons name="share-outline" size={20} color={colors.secondary} />
             )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.aiButton}
+            onPress={() => setShowExtractModal(true)}
+            accessibilityLabel="Build portfolio with AI"
+          >
+            <Ionicons name="sparkles" size={18} color={colors.onPrimary} />
+            <Text style={styles.aiButtonText}>AI</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.addFab}
@@ -341,8 +405,12 @@ export default function PortfolioScreen() {
               <Text style={styles.emptySubtitle}>
                 Add your projects, certifications, and achievements to build your profile.
               </Text>
-              <TouchableOpacity style={styles.emptyButton} onPress={() => setShowModal(true)}>
-                <Text style={styles.emptyButtonText}>Add First Item</Text>
+              <TouchableOpacity style={styles.emptyAiButton} onPress={() => setShowExtractModal(true)}>
+                <Ionicons name="sparkles" size={16} color={colors.onPrimary} />
+                <Text style={styles.emptyButtonText}>Build with AI</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.emptyButtonManual} onPress={() => setShowModal(true)}>
+                <Text style={styles.emptyButtonManualText}>Add Item Manually</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -365,6 +433,63 @@ export default function PortfolioScreen() {
         onClose={() => setShowModal(false)}
         onAdd={handleAdd}
       />
+
+      {/* Extraction method modal */}
+      <Modal visible={showExtractModal} animationType="slide" transparent onRequestClose={() => setShowExtractModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Build with AI</Text>
+              <TouchableOpacity onPress={() => setShowExtractModal(false)}>
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.extractSubtitle}>
+              Upload your CV or paste a website link. AI will extract your achievements automatically.
+            </Text>
+
+            <TouchableOpacity style={styles.extractOption} onPress={handleCVUpload}>
+              <View style={styles.extractOptionIcon}>
+                <Ionicons name="document-text-outline" size={24} color={colors.secondary} />
+              </View>
+              <View style={styles.extractOptionBody}>
+                <Text style={styles.extractOptionTitle}>Upload CV</Text>
+                <Text style={styles.extractOptionHint}>PDF or DOCX, max 5 MB</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.outline} />
+            </TouchableOpacity>
+
+            <Text style={styles.fieldLabel}>Or paste a website link</Text>
+            <TextInput
+              style={styles.input}
+              value={urlInput}
+              onChangeText={setUrlInput}
+              placeholder="https://github.com/username"
+              placeholderTextColor={colors.outline}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+            <TouchableOpacity
+              style={[styles.extractUrlButton, !urlInput.trim() && styles.extractUrlButtonDisabled]}
+              onPress={handleUrlExtract}
+              disabled={!urlInput.trim()}
+            >
+              <Text style={styles.extractUrlButtonText}>Extract from URL</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Processing overlay */}
+      <Modal visible={extracting} transparent animationType="fade">
+        <View style={styles.processingOverlay}>
+          <View style={styles.processingCard}>
+            <ActivityIndicator size="large" color={colors.secondary} />
+            <Text style={styles.processingTitle}>Extracting items…</Text>
+            <Text style={styles.processingSubtitle}>This may take 5–15 seconds</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -504,4 +629,90 @@ const styles = StyleSheet.create({
     marginTop: spacing.md ?? 16,
   },
   addButtonText: { ...typography.labelMd, color: colors.onPrimary },
+
+  // AI Build button
+  aiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: colors.secondary,
+    borderRadius: radius.full ?? 999,
+    paddingHorizontal: spacing.sm ?? 8,
+    paddingVertical: spacing.xs ?? 4,
+  },
+  aiButtonText: { ...typography.labelSm, color: colors.onPrimary, fontWeight: '700' },
+
+  // Empty state AI button
+  emptyAiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.md ?? 16,
+    backgroundColor: colors.secondary,
+    borderRadius: radius.md ?? 8,
+    paddingHorizontal: spacing.lg ?? 24,
+    paddingVertical: spacing.sm ?? 8,
+  },
+  emptyButtonManual: {
+    marginTop: spacing.sm ?? 8,
+    borderRadius: radius.md ?? 8,
+    paddingHorizontal: spacing.lg ?? 24,
+    paddingVertical: spacing.sm ?? 8,
+    borderWidth: 1,
+    borderColor: colors.outlineVariant,
+  },
+  emptyButtonManualText: { ...typography.labelMd, color: colors.onSurfaceVariant },
+
+  // Extraction modal
+  extractSubtitle: {
+    ...typography.bodyMd,
+    color: colors.onSurfaceVariant,
+    marginBottom: spacing.md ?? 16,
+  },
+  extractOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radius.md ?? 8,
+    padding: spacing.md ?? 16,
+    gap: spacing.sm ?? 8,
+    marginBottom: spacing.md ?? 16,
+  },
+  extractOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md ?? 8,
+    backgroundColor: `${colors.secondary}12`,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  extractOptionBody: { flex: 1, gap: 2 },
+  extractOptionTitle: { ...typography.labelMd, color: colors.onSurface },
+  extractOptionHint: { ...typography.labelSm, color: colors.outline },
+  extractUrlButton: {
+    backgroundColor: colors.secondary,
+    borderRadius: radius.md ?? 8,
+    padding: spacing.md ?? 16,
+    alignItems: 'center',
+    marginTop: spacing.xs ?? 4,
+  },
+  extractUrlButtonDisabled: { backgroundColor: colors.surfaceContainerHigh },
+  extractUrlButtonText: { ...typography.labelMd, color: colors.onPrimary },
+
+  // Processing overlay
+  processingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  processingCard: {
+    backgroundColor: colors.surfaceCard,
+    borderRadius: radius.lg ?? 12,
+    padding: spacing.xl ?? 48,
+    alignItems: 'center',
+    gap: spacing.sm ?? 8,
+  },
+  processingTitle: { ...typography.headlineSm, color: colors.onSurface },
+  processingSubtitle: { ...typography.bodyMd, color: colors.onSurfaceVariant },
 });

@@ -4,7 +4,10 @@ import {
   type ShareLinkResponse,
   type UpdatePortfolioItemPayload,
   type VerificationRequestResponse,
+  type ExtractedItem,
+  type BatchCreatePayload,
 } from '@/types/portfolio';
+import { DocumentPickerAsset } from 'expo-document-picker';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080';
 
@@ -84,4 +87,51 @@ export async function requestVerification(
 
 export async function generateShareLink(accessToken: string): Promise<ShareLinkResponse> {
   return request<ShareLinkResponse>('/portfolio/share', accessToken, { method: 'POST' });
+}
+
+export async function extractFromCV(
+  accessToken: string,
+  file: DocumentPickerAsset
+): Promise<ExtractedItem[]> {
+  const formData = new FormData();
+  formData.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType ?? 'application/pdf',
+  } as any);
+
+  const res = await fetch(`${BASE_URL}/portfolio/extract`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw { status: res.status, message: body.message ?? 'Extraction failed' };
+  }
+
+  return res.json();
+}
+
+export async function extractFromUrl(
+  accessToken: string,
+  url: string
+): Promise<ExtractedItem[]> {
+  return request<ExtractedItem[]>('/portfolio/extract-url', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function batchCreateItems(
+  accessToken: string,
+  payload: BatchCreatePayload
+): Promise<PortfolioItem[]> {
+  return request<PortfolioItem[]>('/portfolio/items/batch', accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }

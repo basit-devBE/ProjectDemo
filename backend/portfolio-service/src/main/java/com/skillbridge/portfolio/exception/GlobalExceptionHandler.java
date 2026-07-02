@@ -56,7 +56,27 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleAiServiceException(AiServiceException ex, HttpServletRequest req) {
         log.error("AI service error at {}: {}", req.getRequestURI(), ex.getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(
-                error(503, "Service Unavailable", "AI verification service is temporarily unavailable", req));
+                error(503, "Service Unavailable", ex.getMessage(), req));
+    }
+
+    @ExceptionHandler(FileSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleFileSizeExceeded(FileSizeExceededException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error(400, "Bad Request", ex.getMessage(), req));
+    }
+
+    @ExceptionHandler(UnsupportedFileTypeException.class)
+    public ResponseEntity<Map<String, Object>> handleUnsupportedFileType(UnsupportedFileTypeException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error(400, "Bad Request", ex.getMessage(), req));
+    }
+
+    @ExceptionHandler(FileParsingException.class)
+    public ResponseEntity<Map<String, Object>> handleFileParsing(FileParsingException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error(400, "Bad Request", ex.getMessage(), req));
+    }
+
+    @ExceptionHandler(WebsiteFetchException.class)
+    public ResponseEntity<Map<String, Object>> handleWebsiteFetch(WebsiteFetchException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(error(502, "Bad Gateway", ex.getMessage(), req));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

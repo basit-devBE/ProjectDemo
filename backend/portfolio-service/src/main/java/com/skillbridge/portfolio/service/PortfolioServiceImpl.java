@@ -1,8 +1,11 @@
 package com.skillbridge.portfolio.service;
 
+import com.skillbridge.portfolio.dto.request.BatchCreateItemsRequest;
+import com.skillbridge.portfolio.dto.request.ExtractUrlRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemRequest;
 import com.skillbridge.portfolio.dto.request.PortfolioItemUpdateRequest;
 import com.skillbridge.portfolio.dto.request.VerificationDecisionRequest;
+import com.skillbridge.portfolio.dto.response.ExtractedItemResponse;
 import com.skillbridge.portfolio.dto.response.PortfolioItemResponse;
 import com.skillbridge.portfolio.dto.response.ShareLinkResponse;
 import com.skillbridge.portfolio.dto.response.VerificationRequestResponse;
@@ -18,12 +21,14 @@ import com.skillbridge.portfolio.repository.PortfolioItemRepository;
 import com.skillbridge.portfolio.repository.PortfolioLinkRepository;
 import com.skillbridge.portfolio.repository.VerificationRequestRepository;
 import com.skillbridge.portfolio.service.dto.ClaudeVerificationResponse;
+import com.skillbridge.portfolio.service.dto.ExtractedItemTemplate;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -42,6 +47,9 @@ public class PortfolioServiceImpl implements PortfolioService {
     private final PortfolioLinkRepository portfolioLinkRepository;
     private final ShareTokenGenerator shareTokenGenerator;
     private final ClaudeVerificationService claudeVerificationService;
+    private final ClaudeExtractionService claudeExtractionService;
+    private final FileParserService fileParserService;
+    private final WebsiteFetchService websiteFetchService;
 
     @Override
     public PortfolioItemResponse createItem(PortfolioItemRequest request, UUID userId) {
@@ -174,6 +182,104 @@ public class PortfolioServiceImpl implements PortfolioService {
         PortfolioLink link = portfolioLinkRepository.findByShareTokenAndActiveTrue(token)
                 .orElseThrow(() -> new PortfolioItemNotFoundException("Share link not found"));
         return getPublicPortfolio(link.getUserId());
+    }
+
+    @Override
+    @Transactional
+    public List<PortfolioItemResponse> batchCreateItems(BatchCreateItemsRequest request, UUID userId) {
+        return request.items().stream()
+                .map(itemReq -> {
+                    PortfolioItem item = new PortfolioItem();
+                    item.setUserId(userId);
+                    item.setItemType(itemReq.itemType());
+                    item.setTitle(itemReq.title());
+                    item.setDescription(itemReq.description());
+                    item.setExternalUrl(itemReq.externalUrl());
+                    return portfolioItemRepository.save(item);
+                })
+                .map(item -> toResponse(item, "NONE"))
+                .toList();
+    }
+
+    @Override
+    public List<ExtractedItemResponse> extractFromCV(MultipartFile file, UUID userId) {
+        log.info("Extraction request: userId={} source=CV filename={} size={}bytes", userId, file.getOriginalFilename(), file.getSize());
+        String text = fileParserService.extractText(file);
+        log.info("CV text extracted: {} chars", text.length());
+        List<ExtractedItemTemplate> templates = claudeExtractionService.extract(text);
+        List<ExtractedItemTemplate> deduped = deduplicate(templates, userId);
+        return deduped.stream()
+                .map(this::toExtractedResponse)
+                .toList();
+    }
+
+    @Override
+    public List<ExtractedItemResponse> extractFromUrl(ExtractUrlRequest request, UUID userId) {
+        log.info("Extraction request: userId={} source=URL url={}", userId, request.url());
+        String text = websiteFetchService.fetchAndClean(request.url());
+        log.info("Website text fetched: {} chars", text.length());
+        List<ExtractedItemTemplate> templates = claudeExtractionService.extract(text);
+        List<ExtractedItemTemplate> deduped = deduplicate(templates, userId);
+        return deduped.stream()
+                .map(this::toExtractedResponse)
+                .toList();
+    }
+
+    private static final Set<String> ALLOWED_ITEM_TYPES = Set.of(
+            "PROJECT", "CERTIFICATION", "AWARD", "PUBLICATION", "OTHER");
+
+    private List<ExtractedItemTemplate> deduplicate(List<ExtractedItemTemplate> templates, UUID userId) {
+        int before = templates.size();
+
+        Set<String> existingTitles = portfolioItemRepository.findByUserIdWithVerificationRequests(userId)
+                .stream()
+                .map(item -> normaliseTitle(item.getTitle()))
+                .collect(java.util.stream.Collectors.toSet());
+
+        Set<String> seen = new java.util.LinkedHashSet<>();
+        List<ExtractedItemTemplate> result = new java.util.ArrayList<>();
+
+        for (ExtractedItemTemplate template : templates) {
+            String key = normaliseTitle(template.title());
+            if (seen.contains(key)) {
+                log.info("Dedup: removed duplicate within extraction: \"{}\"", template.title());
+                continue;
+            }
+            if (existingTitles.contains(key)) {
+                log.info("Dedup: removed item already in portfolio: \"{}\"", template.title());
+                continue;
+            }
+            seen.add(key);
+            result.add(template);
+        }
+
+        int removed = before - result.size();
+        if (removed > 0) {
+            log.info("Dedup: removed {} duplicate(s), {} item(s) remaining", removed, result.size());
+        }
+        return result;
+    }
+
+    private static String normaliseTitle(String title) {
+        if (title == null) return "";
+        return title.trim().toLowerCase().replaceAll("\\s+", " ");
+    }
+
+    private ExtractedItemResponse toExtractedResponse(ExtractedItemTemplate template) {
+        String normalisedType = template.itemType() != null
+                ? template.itemType().toUpperCase().trim()
+                : "OTHER";
+        if (!ALLOWED_ITEM_TYPES.contains(normalisedType)) {
+            log.info("Normalising unknown itemType '{}' to OTHER for item \"{}\"", template.itemType(), template.title());
+            normalisedType = "OTHER";
+        }
+        return new ExtractedItemResponse(
+                normalisedType,
+                template.title(),
+                template.description(),
+                template.externalUrl(),
+                template.confidence()
+        );
     }
 
     private String deriveVerificationStatus(boolean verified, Set<VerificationRequest> requests) {

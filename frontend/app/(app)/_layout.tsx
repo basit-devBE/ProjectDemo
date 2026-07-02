@@ -49,9 +49,9 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="career-paths"
+        name="career"
         options={{
-          title: 'Careers',
+          title: 'Career',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name="compass-outline"
@@ -63,12 +63,15 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="career-paths"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="roadmap"
         options={{
-          title: 'Roadmap',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="map-outline" focusedName="map" color={color} focused={focused} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -101,6 +104,13 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="gap-report"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio-review"
         options={{
           href: null,
           tabBarStyle: { display: 'none' },
