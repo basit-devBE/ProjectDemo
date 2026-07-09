@@ -20,6 +20,10 @@ spring:
   jackson:
     mapper:
       accept-case-insensitive-enums: false
+  servlet:
+   multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
 
 jwt:
   secret: ${JWT_SECRET}
@@ -32,6 +36,11 @@ anthropic:
 claude:
   connect-timeout-ms: 15000
   read-timeout-ms: 180000
+
+whisper:
+  url: ${WHISPER_URL:http://whisper-service:9000}
+  timeout-ms: ${WHISPER_TIMEOUT_MS:60000}
+  startup-probe: ${WHISPER_STARTUP_PROBE:true}
 
 springdoc:
   swagger-ui:

@@ -590,6 +590,33 @@ Authorization: Bearer <token>
 
 ---
 
+### Transcribe Voice Answer (US6)
+
+```
+POST /mock-interview/sessions/{sessionId}/questions/{questionId}/transcribe
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+Accepts an audio recording of a spoken answer. Audio is forwarded in-memory to a self-hosted faster-whisper service; the transcript text is returned to the client. **Audio is never persisted** — the client must then submit the (possibly edited) transcript text via the existing [Submit Answer](#submit-answer) endpoint to drive Claude evaluation.
+
+This is a non-reasoning speech-to-text utility endpoint added by the voice amendment (FR-014/015). It reuses the ownership and immutability guards of `/answer` so a voice user cannot bypass them.
+
+| Part | Type | Description |
+|---|---|---|
+| `audio` | file | Required. Audio/mpeg, audio/m4a, or audio/wav. Max 25 MB. |
+
+**Response 200**
+```json
+{ "transcript": "I would use REST for simple CRUD operations because..." }
+```
+
+The client populates the same `TextInput` used for typed answers so the user can edit any mis-transcribed words (technical terms especially) before tapping **Submit Answer**.
+
+**Errors**: 400 (missing part / oversize / wrong mimetype), 401, 404 (session/question not found or not owned), 409 (question already answered, or session already completed), 422 (no speech detected — `{"error":"No speech detected","status":422}` when Whisper returns empty/whitespace-only), 503 (Whisper unavailable)
+
+---
+
 ### Complete Session
 
 ```

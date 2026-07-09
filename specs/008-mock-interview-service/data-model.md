@@ -1,5 +1,7 @@
 # Data Model: Mock Interview Service
 
+> **Voice amendment (2026-07-09)**: No schema change. The `POST /transcribe` endpoint forwards audio in-memory to Whisper and returns text; only the resulting transcript text ever lands on `InterviewQuestion.userAnswer` — and only after the user submits it via the existing `/answer` endpoint. There is NO `audio_path` column, NO new table, and NO new Flyway migration.
+
 ## Schema
 
 PostgreSQL schema: `mock_interview` (isolated; no cross-schema access per Constitution I).
@@ -182,12 +184,15 @@ public class InterviewQuestion {
 | `StartSessionRequest` | `targetRole`, `difficulty` | `@NotBlank @Size(max=200)` on role; `@NotNull` + enum pattern on difficulty |
 | `SubmitAnswerRequest` | `answer` | `@NotBlank @Size(max=5000)` |
 
+**Voice-only**: `POST /transcribe` accepts `multipart/form-data` (part name `audio`), NOT a JSON DTO. Enforcement is at the controller via `MultipartFile` + size/mime checks (≤ 25 MB; `audio/mpeg` | `audio/m4a` | `audio/wav`), not bean validation.
+
 ### Response DTOs
 | DTO | Fields | Used by |
 |---|---|---|
 | `SessionResponse` | id, targetRole, difficulty, status, overallScore, overallFeedback, createdAt, completedAt, `List<QuestionResponse>` | POST /sessions, GET /sessions/{id} |
 | `SessionSummaryResponse` | id, targetRole, difficulty, status, overallScore, createdAt | GET /sessions list |
 | `QuestionResponse` | id, questionText, category, orderIndex, userAnswer, score, feedback, answeredAt | nested in SessionResponse |
+| `TranscribeResponse` (NEW — voice amendment) | `transcript: String` | POST /transcribe 200 response |
 
 ---
 
@@ -204,3 +209,10 @@ public class InterviewQuestion {
 | `/complete` on COMPLETED session | Service → 409 |
 | Answer on COMPLETED session | Service → 409 |
 | `user_id` is never an FK to another schema | DB (Constitution I) |
+| `/transcribe` audio ≤ 25 MB, `audio/mpeg`\|`audio/m4a`\|`audio/wav` | Controller → 400 |
+| `/transcribe` on answered/completed question | Service → 409 (same guards as `/answer`) |
+| `/transcribe` Whisper unavailable | Service → 503 (reuses `AiServiceException` shape) |
+| `/transcribe` audio blob lifecycle | In-memory only — never persisted to disk/DB/logs (FR-014) |
+| `/transcribe` empty/whitespace Whisper transcript | Service → 422 "No speech detected" (FR-016) |
+| `/transcribe` mic permission denied on device | Frontend hides recorder UI; typed `TextInput` remains the only path (FR-017) |
+| `/transcribe` frontend recording cap | Client-side ~5 min / ~24 MB; stops before the 25 MB server limit |

@@ -26,6 +26,40 @@ async function request<T>(path: string, accessToken: string, options: RequestIni
   return res.json();
 }
 
+type TranscribeResponse = { transcript: string };
+
+export async function transcribeAnswer(
+  token: string,
+  sessionId: string,
+  questionId: string,
+  audioUri: string,
+  contentType: string,
+): Promise<string> {
+  const fd = new FormData();
+  fd.append('audio', {
+    uri: audioUri,
+    name: 'answer.m4a',
+    type: contentType,
+  } as unknown as Blob);
+
+  const res = await fetch(
+    `${BASE_URL}/mock-interview/sessions/${sessionId}/questions/${questionId}/transcribe`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    },
+  );
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw { status: res.status, message: body.error ?? body.message ?? 'Transcription failed' };
+  }
+
+  const data = (await res.json()) as TranscribeResponse;
+  return data.transcript;
+}
+
 export async function startSession(
   token: string,
   payload: StartSessionPayload

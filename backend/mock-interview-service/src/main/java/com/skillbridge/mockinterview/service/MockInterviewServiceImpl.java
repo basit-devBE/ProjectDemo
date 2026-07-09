@@ -5,6 +5,7 @@ import com.skillbridge.mockinterview.dto.request.SubmitAnswerRequest;
 import com.skillbridge.mockinterview.dto.response.QuestionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionSummaryResponse;
+import com.skillbridge.mockinterview.dto.response.TranscribeResponse;
 import com.skillbridge.mockinterview.entity.InterviewQuestion;
 import com.skillbridge.mockinterview.entity.InterviewSession;
 import com.skillbridge.mockinterview.exception.AiServiceException;
@@ -20,18 +21,25 @@ import com.skillbridge.mockinterview.service.dto.SessionSummaryTemplate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class MockInterviewServiceImpl implements MockInterviewService {
 
+    private static final long MAX_AUDIO_BYTES = 25L * 1024 * 1024;
+    private static final Set<String> ALLOWED_AUDIO_TYPES = Set.of("audio/mpeg", "audio/m4a", "audio/wav");
+
     private final InterviewSessionRepository sessionRepository;
     private final InterviewQuestionRepository questionRepository;
     private final ClaudeInterviewService claudeInterviewService;
+    private final WhisperTranscriptionService whisperTranscriptionService;
 
     @Override
     @Transactional
@@ -144,6 +152,44 @@ public class MockInterviewServiceImpl implements MockInterviewService {
         InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new SessionNotFoundException("Session not found"));
         sessionRepository.delete(session);
+    }
+
+    @Override
+    @Transactional
+    public TranscribeResponse transcribe(UUID sessionId, UUID questionId, MultipartFile audio, UUID userId) {
+        if (audio == null || audio.isEmpty()) {
+            throw new IllegalArgumentException("audio file is required");
+        }
+        if (audio.getSize() > MAX_AUDIO_BYTES) {
+            throw new IllegalArgumentException("audio file exceeds 25 MB limit");
+        }
+        String contentType = audio.getContentType();
+        if (contentType == null || !ALLOWED_AUDIO_TYPES.contains(contentType)) {
+            throw new IllegalArgumentException("audio must be audio/mpeg, audio/m4a, or audio/wav");
+        }
+
+        InterviewSession session = sessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new SessionNotFoundException("Session not found"));
+        if ("COMPLETED".equals(session.getStatus())) {
+            throw new SessionAlreadyCompletedException("Session is already completed");
+        }
+        InterviewQuestion question = session.getQuestions().stream()
+                .filter(q -> q.getId().equals(questionId))
+                .findFirst()
+                .orElseThrow(() -> new SessionNotFoundException("Question not found"));
+        if (question.getUserAnswer() != null) {
+            throw new QuestionAlreadyAnsweredException("Question has already been answered");
+        }
+
+        byte[] bytes;
+        try {
+            bytes = audio.getBytes();
+        } catch (IOException e) {
+            throw new AiServiceException("Could not read audio upload", e);
+        }
+
+        String transcript = whisperTranscriptionService.transcribe(bytes, contentType);
+        return new TranscribeResponse(transcript);
     }
 
     private String buildQaDigest(InterviewSession session) {

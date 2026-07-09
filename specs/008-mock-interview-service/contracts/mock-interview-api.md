@@ -4,6 +4,8 @@
 **Controller base path**: `/mock-interview`
 **Auth**: Bearer JWT on all endpoints except `/health`.
 
+> **Voice amendment**: All endpoints accept JSON except `POST .../transcribe`, which accepts `multipart/form-data` (audio file). Error shape is identical across both.
+
 **Uniform error shape** (Constitution II):
 ```json
 { "error": "string", "status": 400 }
@@ -121,6 +123,25 @@ Submit an answer. Claude evaluates it.
 ```
 
 **Errors**: 400 (blank answer), 401, 404 (session/question not found or not owned), 409 (question already answered, or session already completed), 503 (Claude unavailable)
+
+---
+
+## POST /mock-interview/sessions/{sessionId}/questions/{questionId}/transcribe
+
+Transcribe a spoken answer. Audio is forwarded in-memory to a self-hosted faster-whisper service; the transcript text is returned to the client. **No audio is persisted** — the client must then submit the (possibly edited) transcript text via the existing `POST .../answer` endpoint to drive Claude evaluation.
+
+This is a non-reasoning speech-to-text utility endpoint added by the voice amendment (FR-014/015). It reuses the ownership and immutability guards of `/answer` so a voice user cannot bypass them.
+
+**Request** — `multipart/form-data`:
+- Part `audio` (required): binary audio, `audio/mpeg` | `audio/m4a` | `audio/wav`, max 25 MB.
+
+**200**
+```json
+{ "transcript": "I would use REST for simple CRUD operations because..." }
+```
+`transcript` is non-empty. The client populates the same `TextInput` used for typed answers so the user can edit any mis-transcribed words (e.g. technical terms) before tapping **Submit Answer**.
+
+**Errors**: 400 (missing part / oversize / wrong mimetype), 401, 404 (session/question not found or not owned), 409 (question already answered, or session already completed), 422 (no speech detected — `{"error":"No speech detected","status":422}` when Whisper returns empty/whitespace-only), 503 (Whisper unavailable — `{"error":"AI service unavailable, try again later","status":503}`)
 
 ---
 

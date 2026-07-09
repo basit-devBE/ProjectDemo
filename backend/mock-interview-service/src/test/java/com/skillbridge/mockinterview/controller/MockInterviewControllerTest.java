@@ -5,7 +5,9 @@ import com.skillbridge.mockinterview.dto.request.SubmitAnswerRequest;
 import com.skillbridge.mockinterview.dto.response.QuestionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionSummaryResponse;
+import com.skillbridge.mockinterview.dto.response.TranscribeResponse;
 import com.skillbridge.mockinterview.exception.AiServiceException;
+import com.skillbridge.mockinterview.exception.EmptyTranscriptException;
 import com.skillbridge.mockinterview.exception.QuestionAlreadyAnsweredException;
 import com.skillbridge.mockinterview.exception.SessionAlreadyCompletedException;
 import com.skillbridge.mockinterview.exception.SessionIncompleteException;
@@ -21,9 +23,11 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
@@ -327,5 +331,100 @@ class MockInterviewControllerTest {
         mockMvc.perform(get("/mock-interview/health"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
+    }
+
+    // ===== US6 — POST /transcribe =====
+
+    private static final MockMultipartFile AUDIO_FILE = new MockMultipartFile(
+            "audio", "answer.m4a", "audio/m4a", new byte[]{1, 2, 3, 4});
+
+    @Test
+    void transcribe_validAudio_returns200WithTranscript() throws Exception {
+        when(mockInterviewService.transcribe(eq(SESSION_ID), eq(QUESTION_ID), any(MultipartFile.class), eq(USER_ID)))
+                .thenReturn(new TranscribeResponse("I would use REST for simple CRUD operations."));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(AUDIO_FILE)
+                        .header("Authorization", "Bearer test"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.transcript").value("I would use REST for simple CRUD operations."));
+    }
+
+    @Test
+    void transcribe_missingAudioPart_returns400() throws Exception {
+        MockMultipartFile empty = new MockMultipartFile("audio", "answer.m4a", "audio/m4a", new byte[0]);
+        when(mockInterviewService.transcribe(eq(SESSION_ID), eq(QUESTION_ID), any(MultipartFile.class), eq(USER_ID)))
+                .thenThrow(new IllegalArgumentException("audio file is required"));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(empty))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void transcribe_wrongMime_returns400() throws Exception {
+        when(mockInterviewService.transcribe(eq(SESSION_ID), eq(QUESTION_ID), any(MultipartFile.class), eq(USER_ID)))
+                .thenThrow(new IllegalArgumentException("audio must be audio/mpeg, audio/m4a, or audio/wav"));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(AUDIO_FILE))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void transcribe_sessionNotFound_returns404() throws Exception {
+        when(mockInterviewService.transcribe(any(), any(), any(MultipartFile.class), any()))
+                .thenThrow(new SessionNotFoundException("Session not found"));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(AUDIO_FILE))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    void transcribe_alreadyAnswered_returns409() throws Exception {
+        when(mockInterviewService.transcribe(any(), any(), any(MultipartFile.class), any()))
+                .thenThrow(new QuestionAlreadyAnsweredException("Already answered"));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(AUDIO_FILE))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
+    }
+
+    @Test
+    void transcribe_completedSession_returns409() throws Exception {
+        when(mockInterviewService.transcribe(any(), any(), any(MultipartFile.class), any()))
+                .thenThrow(new SessionAlreadyCompletedException("Already completed"));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(AUDIO_FILE))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409));
+    }
+
+    @Test
+    void transcribe_emptyTranscript_returns422() throws Exception {
+        when(mockInterviewService.transcribe(any(), any(), any(MultipartFile.class), any()))
+                .thenThrow(new EmptyTranscriptException("No speech detected"));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(AUDIO_FILE))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.status").value(422))
+                .andExpect(jsonPath("$.error").value("No speech detected"));
+    }
+
+    @Test
+    void transcribe_whisperDown_returns503() throws Exception {
+        when(mockInterviewService.transcribe(any(), any(), any(MultipartFile.class), any()))
+                .thenThrow(new AiServiceException("AI service unavailable"));
+
+        mockMvc.perform(multipart("/mock-interview/sessions/{sid}/questions/{qid}/transcribe", SESSION_ID, QUESTION_ID)
+                        .file(AUDIO_FILE))
+                .andExpect(status().isServiceUnavailable());
     }
 }

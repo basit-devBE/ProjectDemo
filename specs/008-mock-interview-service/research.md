@@ -1,7 +1,7 @@
 # Research: Mock Interview Service
 
 **Feature**: `008-mock-interview-service`
-**Date**: 2026-07-08
+**Date**: 2026-07-08 (amended 2026-07-09 — added Decision 7)
 
 ---
 
@@ -65,3 +65,33 @@
 **Rationale**: The in-memory module state pattern (`extraction-state.ts` in portfolio) does not survive app backgrounding — if the OS suspends the app mid-interview, the module-level state is cleared. Interview session data is fully persisted server-side, so re-fetching on screen mount is cheap, reliable, and always consistent with the database truth.
 
 **Alternatives considered**: In-memory state bridge — fragile across navigation stack pops/pushes and app lifecycle suspend/resume. Rejected.
+
+---
+
+## Decision 7 — Voice answers: transcription approach (added 2026-07-09)
+
+**Decision**: Add a self-hosted faster-whisper service running as a sibling `whisper-service` docker container (CPU, `small` model). The mock-interview-service exposes a new `POST /mock-interview/sessions/{sessionId}/questions/{questionId}/transcribe` multipart endpoint that forwards audio in-memory to Whisper and returns `{ "transcript": string }`. The transcript populates the existing answer `TextInput` so the user can edit it before submitting through the unchanged `/answer` endpoint that drives Claude evaluation. Audio is never persisted (no disk, no DB column, no logs).
+
+**Rationale**: Of the three candidate approaches, on-device STT (`@react-native-voice/voice`) would have forced the whole app off Expo Go onto `expo-dev-client` + prebuild/EAS — a large dev-workflow change for one feature. Third-party STT (OpenAI Whisper API / Deepgram) would have introduced a new paid external AI vendor and `OPENAI_API_KEY` secret, weakening Constitution I (microservice autonomy) for an educational app whose users have varied accents and where the value is voice quality. Self-hosted faster-whisper keeps Expo Go (audio recording works in Expo Go via `expo-av`), keeps Claude as the sole *reasoning* engine, and requires no new external API key — the same brain still grades every answer. The `small` model is the accuracy/CPU-time sweet spot for the AmaliTech student-base (mixed accents, technical vocabulary like "kubernetes", "JOIN"); CPU is fine because answers are sequential (one user, one question at a time) and the 20s answer budget is unaffected (transcription and Claude eval are separate HTTP calls). Discarding audio after transcription is privacy-positive and avoids adding a blob column or storage lifecycle management to the schema.
+
+The two-step flow (transcribe → edit → submit) rather than one-shot was chosen deliberately: mis-transcriptions of technical terms must be correctable *before* the user is graded. Voice is an augmentation of US2 that funnels back into US2's existing endpoint — typed and spoken answers hit exactly the same Claude evaluation path.
+
+**Alternatives considered**:
+
+1. **On-device STT (`@react-native-voice/voice`)** — free, near-instant, no new service. Rejected: native module forces `expo-dev-client` + prebuild, reforming the dev workflow for the whole app. OS recognizers (Apple Speech / Google) vary materially across accents, especially for technical vocabulary — the property that matters most for mock-interview users.
+
+2. **Third-party STT (OpenAI Whisper API)** — best quality, trivial to set up, $0.006/min. Rejected: adds a second paid external AI vendor + secret (`OPENAI_API_KEY`), aggravating Constitution I. Self-hosted Whisper matches quality at our scale without the vendor coupling or ongoing cost.
+
+3. **Persist audio on the question** — `audioPath` column + playback in the report screen. Rejected for v1: adds storage/I/O management (cleanup on session delete = extra cascade work), grows DB, and the two-step flow already lets the user fix mistakes so playback adds little to no value on top of the corrected transcript.
+
+4. **One-shot audio → score** — simpler UX (one round-trip) and one backend call. Rejected: a mis-transcribed term like "kubernetes" → "cooper netty's" would silently drive a Claude score against the wrong word; the user must see and correct the transcript before being graded.
+
+**Constitution framing**: faster-whisper is a *speech-to-text utility* (audio processing), not "AI Inference" in the sense the Technology Constraints table reserves for Anthropic Claude as the reasoning engine. The `WhisperTranscriptionService` is disciplined exactly like `ClaudeInterviewService`: a named config analogue (`WHISPER_TRANSCRIBE_V1`), JSON-safety guard, 503 fallback, and INFO-level latency logging. No constitution amendment is required; if a future feature wants to use a *reasoning* model other than Claude, that would trigger the amendment path.
+
+**Edge cases resolved post-MECE review**:
+
+- **Silent recording**: Whisper returns the empty string → `/transcribe` rejects with `422 { "error": "No speech detected" }` (FR-016). The client surfaces "No speech was detected — please try again" and keeps the recorder usable. This prevents empty text from bouncing off `/answer` 400.
+- **Mic permission denied at runtime**: the recorder UI is hidden; the typed answer `TextInput` remains the only path (FR-017). Voice is strictly optional — no crash, no blocked screen.
+- **First-run misconfiguration**: optional `WHISPER_STARTUP_PROBE=true` makes the service WARN-log (without blocking startup) if `WHISPER_URL` is unreachable on boot, so a typo shows up before the first student records audio. Typed-answer path is unaffected.
+- **Image reproducibility**: the `whisper-service` docker-compose entry pins to a digest (not `:latest`) so a breaking upstream change can't silently break local dev.
+- **Frontend length cap**: `useInterviewRecorder` stops recording at ~5 min / ~24 MB on the device, below the 25 MB server limit, so the user gets feedback on the client before an upload-time 400.

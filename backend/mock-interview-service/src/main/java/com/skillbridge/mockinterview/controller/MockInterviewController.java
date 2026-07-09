@@ -5,14 +5,17 @@ import com.skillbridge.mockinterview.dto.request.SubmitAnswerRequest;
 import com.skillbridge.mockinterview.dto.response.QuestionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionSummaryResponse;
+import com.skillbridge.mockinterview.dto.response.TranscribeResponse;
 import com.skillbridge.mockinterview.security.JwtUserDetails;
 import com.skillbridge.mockinterview.service.MockInterviewService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -57,6 +60,17 @@ public class MockInterviewController {
             @Valid @RequestBody SubmitAnswerRequest request,
             @AuthenticationPrincipal JwtUserDetails principal) {
         return mockInterviewService.submitAnswer(sessionId, questionId, request, principal.userId());
+    }
+
+@PostMapping(
+            path = "/sessions/{sessionId}/questions/{questionId}/transcribe",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public TranscribeResponse transcribeAnswer(
+            @PathVariable UUID sessionId,
+            @PathVariable UUID questionId,
+            @RequestParam("audio") MultipartFile audio,
+            @AuthenticationPrincipal JwtUserDetails principal) {
+        return mockInterviewService.transcribe(sessionId, questionId, audio, principal.userId());
     }
 
     @PostMapping("/sessions/{sessionId}/complete")

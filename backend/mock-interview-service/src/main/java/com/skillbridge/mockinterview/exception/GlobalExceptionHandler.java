@@ -47,6 +47,13 @@ public class GlobalExceptionHandler {
                 error(400, "Bad Request", "Malformed or invalid request body", req));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(
+            IllegalArgumentException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                error(400, "Bad Request", ex.getMessage(), req));
+    }
+
     @ExceptionHandler(SessionNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(
             SessionNotFoundException ex, HttpServletRequest req) {
@@ -63,6 +70,13 @@ public class GlobalExceptionHandler {
             SessionIncompleteException ex, HttpServletRequest req) {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(
                 error(422, "Unprocessable Entity", ex.getMessage(), req));
+    }
+
+    @ExceptionHandler(EmptyTranscriptException.class)
+    public ResponseEntity<Map<String, Object>> handleEmptyTranscript(
+            EmptyTranscriptException ex, HttpServletRequest req) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(
+                error(422, ex.getMessage(), ex.getMessage(), req));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

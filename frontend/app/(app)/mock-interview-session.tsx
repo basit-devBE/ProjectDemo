@@ -15,7 +15,8 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '@/context/AuthContext';
 import { colors, typography, spacing, radius } from '@/constants/theme';
-import { getSession, submitAnswer, completeSession } from '@/services/mockInterview';
+import { getSession, submitAnswer, completeSession, transcribeAnswer } from '@/services/mockInterview';
+import { useInterviewRecorder } from '@/hooks/useInterviewRecorder';
 import { type InterviewSession, type InterviewQuestion } from '@/types/mockInterview';
 
 function usePulse() {
@@ -49,6 +50,7 @@ export default function MockInterviewSessionScreen() {
   const { state } = useAuth();
   const token = state.accessToken;
   const pulseOpacity = usePulse();
+  const recorder = useInterviewRecorder();
 
   const [session, setSession] = useState<InterviewSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,6 +60,7 @@ export default function MockInterviewSessionScreen() {
   const [answer, setAnswer] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchSession = useCallback(async () => {
@@ -150,6 +153,41 @@ export default function MockInterviewSessionScreen() {
       } finally {
         setIsCompleting(false);
       }
+    }
+  };
+
+  const handleRecordToggle = async () => {
+    if (!token || !session || !currentQuestion) return;
+    if (isTranscribing) return;
+
+    if (recorder.isRecording) {
+      setActionError(null);
+      const { uri, contentType } = await recorder.stop();
+      if (!uri) {
+        setActionError('No recording captured. Please try again.');
+        return;
+      }
+
+      setIsTranscribing(true);
+      try {
+        const transcript = await transcribeAnswer(token, session.id, currentQuestion.id, uri, contentType);
+        setAnswer(transcript);
+      } catch (e: any) {
+        if (e?.status === 422) {
+          setActionError('No speech was detected — please try again.');
+        } else if (e?.status === 503) {
+          setActionError('Voice unavailable, please type your answer.');
+        } else if (e?.status === 400) {
+          setActionError('Recording too long or wrong format — try again.');
+        } else {
+          setActionError(e?.message ?? 'Could not transcribe. Please type your answer.');
+        }
+      } finally {
+        setIsTranscribing(false);
+      }
+    } else {
+      setActionError(null);
+      await recorder.start();
     }
   };
 
@@ -259,6 +297,39 @@ export default function MockInterviewSessionScreen() {
                   multiline
                   textAlignVertical="top"
                 />
+
+                {recorder.permission === 'granted' && (
+                  <View style={styles.recorderRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.recordBtn,
+                        recorder.isRecording && styles.recordBtnActive,
+                        isTranscribing && styles.recordBtnDisabled,
+                      ]}
+                      onPress={handleRecordToggle}
+                      disabled={isTranscribing}
+                      activeOpacity={0.8}
+                    >
+                      {isTranscribing ? (
+                        <ActivityIndicator size="small" color={colors.onPrimary} />
+                      ) : (
+                        <Ionicons
+                          name={recorder.isRecording ? 'stop-circle' : 'mic'}
+                          size={18}
+                          color={colors.onPrimary}
+                        />
+                      )}
+                      <Text style={styles.recordBtnText}>
+                        {isTranscribing
+                          ? 'Transcribing…'
+                          : recorder.isRecording
+                            ? `Stop (${recorder.recordingSeconds}s) · max 5 min`
+                            : 'Record instead'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 <TouchableOpacity
                   style={[styles.submitBtn, (!answer.trim() || isSubmitting) && styles.submitBtnDisabled]}
                   onPress={handleSubmit}
@@ -387,6 +458,30 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     fontSize: 15,
     minHeight: 120,
+  },
+  recorderRow: { flexDirection: 'row', alignItems: 'center' },
+  recordBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    flex: 1,
+  },
+  recordBtnActive: {
+    backgroundColor: colors.error,
+  },
+  recordBtnDisabled: {
+    backgroundColor: colors.surfaceContainerHigh,
+    opacity: 0.6,
+  },
+  recordBtnText: {
+    ...typography.labelMd,
+    color: colors.onPrimary,
+    fontSize: 13,
   },
   submitBtn: {
     backgroundColor: colors.tertiary,

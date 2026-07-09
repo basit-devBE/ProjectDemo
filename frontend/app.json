@@ -14,14 +14,18 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.skillbridge.ai"
+      "bundleIdentifier": "com.skillbridge.ai",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Used to record spoken answers for mock interviews."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       },
-      "package": "com.skillbridge.ai"
+      "package": "com.skillbridge.ai",
+      "permissions": ["android.permission.RECORD_AUDIO"]
     },
     "web": {
       "bundler": "metro",
@@ -32,7 +36,8 @@
       "expo-router",
       "expo-secure-store",
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      "expo-av"
     ],
     "experiments": {
       "typedRoutes": true

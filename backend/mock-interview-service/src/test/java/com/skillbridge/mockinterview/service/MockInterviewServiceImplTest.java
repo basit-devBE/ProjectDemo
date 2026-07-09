@@ -6,9 +6,11 @@ import com.skillbridge.mockinterview.dto.request.SubmitAnswerRequest;
 import com.skillbridge.mockinterview.dto.response.QuestionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionResponse;
 import com.skillbridge.mockinterview.dto.response.SessionSummaryResponse;
+import com.skillbridge.mockinterview.dto.response.TranscribeResponse;
 import com.skillbridge.mockinterview.entity.InterviewQuestion;
 import com.skillbridge.mockinterview.entity.InterviewSession;
 import com.skillbridge.mockinterview.exception.AiServiceException;
+import com.skillbridge.mockinterview.exception.EmptyTranscriptException;
 import com.skillbridge.mockinterview.exception.QuestionAlreadyAnsweredException;
 import com.skillbridge.mockinterview.exception.SessionAlreadyCompletedException;
 import com.skillbridge.mockinterview.exception.SessionIncompleteException;
@@ -24,6 +26,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.List;
@@ -47,6 +51,8 @@ class MockInterviewServiceImplTest {
     InterviewQuestionRepository questionRepository;
     @Mock
     ClaudeInterviewService claudeInterviewService;
+    @Mock
+    WhisperTranscriptionService whisperTranscriptionService;
 
     @InjectMocks
     MockInterviewServiceImpl service;
@@ -236,6 +242,101 @@ class MockInterviewServiceImplTest {
 
         assertThatThrownBy(() -> service.deleteSession(SESSION_ID, USER_ID))
                 .isInstanceOf(SessionNotFoundException.class);
+    }
+
+    // ===== US6 — transcribe =====
+
+    private MultipartFile audioFile(String mime) {
+        return new MockMultipartFile("audio", "answer.m4a", mime, new byte[]{1, 2, 3, 4});
+    }
+
+    @Test
+    void transcribe_validAudio_returnsTranscript() {
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID))
+                .thenReturn(Optional.of(sessionWithQuestion("IN_PROGRESS", null)));
+        when(whisperTranscriptionService.transcribe(any(byte[].class), eq("audio/m4a")))
+                .thenReturn("I would use REST.");
+
+        TranscribeResponse result = service.transcribe(SESSION_ID, QUESTION_ID, audioFile("audio/m4a"), USER_ID);
+
+        assertThat(result.transcript()).isEqualTo("I would use REST.");
+    }
+
+    @Test
+    void transcribe_nullAudio_throws400() {
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, null, USER_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void transcribe_emptyAudio_throws400() {
+        MultipartFile empty = new MockMultipartFile("audio", "answer.m4a", "audio/m4a", new byte[0]);
+
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, empty, USER_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void transcribe_wrongMime_throws400() {
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, audioFile("video/mp4"), USER_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void transcribe_sessionNotFound_throws404() {
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, audioFile("audio/m4a"), USER_ID))
+                .isInstanceOf(SessionNotFoundException.class);
+    }
+
+    @Test
+    void transcribe_completedSession_throws409() {
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID))
+                .thenReturn(Optional.of(sessionWithQuestion("COMPLETED", null)));
+
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, audioFile("audio/m4a"), USER_ID))
+                .isInstanceOf(SessionAlreadyCompletedException.class);
+    }
+
+    @Test
+    void transcribe_alreadyAnsweredQuestion_throws409() {
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID))
+                .thenReturn(Optional.of(sessionWithQuestion("IN_PROGRESS", "previous answer")));
+
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, audioFile("audio/m4a"), USER_ID))
+                .isInstanceOf(QuestionAlreadyAnsweredException.class);
+    }
+
+    @Test
+    void transcribe_unknownQuestion_throws404() {
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID))
+                .thenReturn(Optional.of(sessionWithQuestion("IN_PROGRESS", null)));
+
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, UUID.randomUUID(), audioFile("audio/m4a"), USER_ID))
+                .isInstanceOf(SessionNotFoundException.class);
+    }
+
+    @Test
+    void transcribe_emptyTranscriptFromWhisper_throwsEmptyTranscript() {
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID))
+                .thenReturn(Optional.of(sessionWithQuestion("IN_PROGRESS", null)));
+        when(whisperTranscriptionService.transcribe(any(byte[].class), eq("audio/m4a")))
+                .thenThrow(new EmptyTranscriptException("No speech detected"));
+
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, audioFile("audio/m4a"), USER_ID))
+                .isInstanceOf(EmptyTranscriptException.class);
+    }
+
+    @Test
+    void transcribe_whisperDown_throwsAiService() {
+        when(sessionRepository.findByIdAndUserId(SESSION_ID, USER_ID))
+                .thenReturn(Optional.of(sessionWithQuestion("IN_PROGRESS", null)));
+        when(whisperTranscriptionService.transcribe(any(byte[].class), eq("audio/m4a")))
+                .thenThrow(new AiServiceException("AI service unavailable"));
+
+        assertThatThrownBy(() -> service.transcribe(SESSION_ID, QUESTION_ID, audioFile("audio/m4a"), USER_ID))
+                .isInstanceOf(AiServiceException.class);
     }
 
     private InterviewSession sessionWithQuestion(String status, String existingAnswer) {

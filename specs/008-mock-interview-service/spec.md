@@ -4,7 +4,7 @@
 
 **Created**: 2026-07-08
 
-**Status**: Draft
+**Status**: Amended 2026-07-09 — added User Story 6 (Voice answers) + FR-014/015 + SC-008
 
 ## User Scenarios & Testing
 
@@ -140,11 +140,45 @@ returns 404.
 
 ---
 
+### User Story 6 - Answer by Voice (Priority: P2)
+
+A student who prefers to speak their answer can record audio for a question; the system transcribes it via a self-hosted faster-whisper service, returns the transcript, and the student reviews/edits it in the existing text box before submitting. Claude then evaluates the (edited) text exactly as it does for typed answers.
+
+**Why this priority**: Augments US2 (already P1). Typed answers remain the primary path; voice is an accessibility/preference layer that funnels back into US2's existing endpoint. No other user story changes.
+
+**Independent Test**: POST `/mock-interview/sessions/{sessionId}/questions/{questionId}/transcribe` with a multipart `audio` file (≤ 25 MB) and a valid JWT → receive 200 with `{ "transcript": "<non-empty string>" }`. Then POST the transcript to .../answer → receive 200 with score + feedback.
+
+**Acceptance Scenarios**:
+
+1. **Given** an unanswered question on an active session, **When** the student POSTs a valid audio file to `/transcribe`, **Then** the system returns 200 with a non-empty `transcript` and discards the audio.
+
+2. **Given** a question that is already answered or a completed session, **When** the student POSTs audio to `/transcribe`, **Then** the system returns 409.
+
+3. **Given** an already-edited transcript, **When** the student edits it in the text box and submits via the existing `/answer` endpoint, **Then** the system evaluates the edited text with the existing Claude flow (no special voice branch in scoring).
+
+4. **Given** the whisper service is down, **When** the student POSTs audio, **Then** the system returns 503 `AI service unavailable, try again later` — voice gracefully fails over to typing.
+
+5. **Given** a multipart request missing the `audio` part, oversized (>25 MB), or wrong mimetype, **When** POSTed, **Then** the system returns 400.
+
+6. **Given** a `sessionId` belonging to another user, **When** the student POSTs audio, **Then** the system returns 404 (no ownership leakage).
+
+7. **Given** a successfully transcribed answer, **When** the audio blob lifecycle is inspected, **Then** the audio is held in-memory only for the duration of the Whisper call and is never written to disk, the database, or logs.
+
+8. **Given** Whisper returns an empty/whitespace-only transcript (silent recording), **When** the student POSTs audio, **Then** the system returns 422 `{ "error": "No speech detected" }` (FR-016) — the client surfaces "No speech was detected — please try again" and the recorder stays usable.
+
+9. **Given** the user denies microphone permission at runtime, **When** the session screen mounts, **Then** the recorder UI is hidden and the typed-answer `TextInput` remains the only answer path (FR-017) — no crash, no blocked screen.
+
+---
+
 ### Edge Cases
 
 - What if all questions are answered but `/complete` is never called? Session remains IN_PROGRESS indefinitely (acceptable for v1 — no auto-expiry). Resume via `GET /sessions/{id}` (see FR-012).
 - What if Claude returns zero questions? The system MUST NOT persist an empty session; reject with 503 (see FR-011). A non-empty result (1–7) is persisted as-is.
 - What if the CV/role is very unusual? Claude should still produce generic questions; if it returns an unmapped category it is stored as OTHER.
+- What if the user records audio for an already-answered/completed question? `/transcribe` returns the same 409 as `/answer` would — the transcript must never reach the grade step on a frozen question.
+- What if Whisper mis-transcribes a technical term? The two-step flow returns the transcript to the text box for the user to edit before tapping the existing Submit Answer button (see FR-014); the user, not Whisper, is the final authority on what gets graded.
+- What if the user records silence? Whisper returns the empty string; `/transcribe` rejects with 422 (FR-016), the client shows "No speech was detected — please try again", and the recorder remains usable. No transcript lands on `/answer`.
+- What if the user denies microphone permission? The recorder UI is hidden and the typed answer `TextInput` is the only path (FR-017). Voice is strictly optional.
 
 ## Requirements
 
@@ -163,6 +197,10 @@ returns 404.
 - **FR-011**: System MUST reject session creation with 503 if Claude returns zero questions (no empty session persisted).
 - **FR-012**: System MUST support resuming an in-progress session via `GET /sessions/{id}`; the client resumes at the lowest-`orderIndex` question with a null `userAnswer`.
 - **FR-013**: Question `category` MUST accept TECHNICAL, BEHAVIORAL, SITUATIONAL, or OTHER (OTHER is the fallback for any unmapped Claude category).
+- **FR-014**: System MUST expose `POST /mock-interview/sessions/{sessionId}/questions/{questionId}/transcribe` accepting `multipart/form-data` (field `audio`, ≤ 25 MB, mimetype `audio/mpeg` | `audio/m4a` | `audio/wav`). It forwards audio to a self-hosted faster-whisper service, returns `200 { "transcript": string }`, and MUST NOT persist the audio blob (only the transcript text — and even that only lands on `userAnswer` once the user submits it via the existing `/answer` endpoint).
+- **FR-015**: `/transcribe` MUST return `409` if the question is already answered or the session is COMPLETED, `404` if not owned by the caller, `400` if the file is missing/oversized/wrong type, and `503` (same shape as FR-011) if the Whisper service is unavailable or returns an error. The endpoint mirrors the ownership and immutability guarantees of `/answer` so a voice user cannot bypass them.
+- **FR-016**: `/transcribe` MUST return `422 { "error": "No speech detected", "status": 422 }` when Whisper returns an empty or whitespace-only transcript (silence recorded, mic muted, no speech detected). This prevents the user from receiving an empty text box that would just bounce off `Submit Answer` → `/answer` 400 (blank answer). The frontend surfaces this as a "No speech was detected — please try again" toast and keeps the recorder visible.
+- **FR-017**: The frontend recorder MUST handle microphone permission denial gracefully: if the user denies mic permission (iOS `AVAudioSession.requestRecordPermission` returns false, Android `RECORD_AUDIO` not granted), the recorder UI is hidden and the user is left with the typed-answer `TextInput` as the only path. No crash, no blocked screen. Voice is optional, typed is always primary.
 
 ### Key Entities
 
@@ -178,12 +216,14 @@ returns 404.
 - **SC-005**: JaCoCo line coverage ≥ 70%.
 - **SC-006**: Service starts cleanly via `docker-compose up mock-interview-service` with no migration errors.
 - **SC-007**: Mobile app can complete a full interview session end-to-end.
+- **SC-008**: Mobile app can record a spoken answer, review the transcript in the text box, edit it, and submit it through the same scoring flow as a typed answer.
 
 ## Assumptions
 
 - JWT secret is shared across all services; mock-interview-service validates tokens locally.
-- No file uploads — all input is JSON.
+- Text answers are JSON; only the optional voice path (FR-014) uses `multipart/form-data` audio, which is held in-memory and forwarded to Whisper — never persisted to disk or DB.
 - The Claude API key is available as `ANTHROPIC_API_KEY` environment variable.
+- The faster-whisper service is reachable at `WHISPER_URL` (default `http://whisper-service:9000`) inside the docker-compose network.
 - Port 8005 is used (8001–8004 already taken).
 - Tests use `@WebMvcTest` with mocked services; no running PostgreSQL required.
 - No rate limiting or session quotas for v1.
