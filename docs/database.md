@@ -207,11 +207,12 @@ SkillBridge AI uses **PostgreSQL 16**. Each microservice owns an isolated schema
 | id | UUID | PK | — |
 | portfolio_item_id | UUID | FK → portfolio_items.id | — |
 | requested_by | UUID | NOT NULL | Student user_id |
-| reviewed_by | UUID | NULLABLE | Admin user_id |
+| reviewed_by | UUID | NULLABLE | Admin user_id (NULL for AI decisions) |
 | status | VARCHAR(20) | NOT NULL | PENDING, APPROVED, REJECTED |
-| reviewer_note | TEXT | NULLABLE | — |
+| reviewer_note | TEXT | NULLABLE | AI reason or admin note |
+| review_source | VARCHAR(20) | NOT NULL, DEFAULT 'AI' | AI, HUMAN, PENDING_FALLBACK |
 | requested_at | TIMESTAMPTZ | NOT NULL | — |
-| reviewed_at | TIMESTAMPTZ | NULLABLE | — |
+| reviewed_at | TIMESTAMPTZ | NULLABLE | NULL when status is PENDING_FALLBACK |
 
 ### `portfolio.portfolio_links`
 

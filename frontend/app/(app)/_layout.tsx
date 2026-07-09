@@ -49,9 +49,9 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
-        name="career-paths"
+        name="career"
         options={{
-          title: 'Careers',
+          title: 'Career',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               name="compass-outline"
@@ -63,11 +63,42 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="career-paths"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="roadmap"
         options={{
-          title: 'Roadmap',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio"
+        options={{
+          title: 'Portfolio',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="map-outline" focusedName="map" color={color} focused={focused} />
+            <TabIcon
+              name="briefcase-outline"
+              focusedName="briefcase"
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="mock-interview"
+        options={{
+          title: 'Interview',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name="mic-outline"
+              focusedName="mic"
+              color={color}
+              focused={focused}
+            />
           ),
         }}
       />
@@ -87,6 +118,27 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="gap-report"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio-review"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="mock-interview-session"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="mock-interview-report"
         options={{
           href: null,
           tabBarStyle: { display: 'none' },

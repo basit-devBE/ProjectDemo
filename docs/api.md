@@ -241,6 +241,17 @@ Authorization: Bearer <token>
 
 ---
 
+### Delete Report
+
+```
+DELETE /skill-gap/reports/{reportId}
+Authorization: Bearer <token>
+```
+
+**Response 204** — no body. Cascades to all `skill_gaps` and `resource_recommendations` rows. Also removes the parent `cv_upload` record (metadata-only; no file stored).
+
+---
+
 ## portfolio-service — Port 8004
 
 ### Add Portfolio Item
@@ -259,32 +270,83 @@ Authorization: Bearer <token>
 }
 ```
 
-**Response 201** — returns created item with `verified: false`.
+**Response 201** — returns created item with `verified: false`, `verificationStatus: "NONE"`.
 
 ---
 
-### Get Portfolio
+### Get My Portfolio
+
+```
+GET /portfolio/mine
+Authorization: Bearer <token>
+```
+
+**Response 200** — returns all items for the authenticated student with `verificationStatus` for each item (`NONE`, `PENDING`, `APPROVED`, `REJECTED`).
+
+---
+
+### Get Public Portfolio
 
 ```
 GET /portfolio/{userId}
 ```
 
-No auth required for public portfolios. Returns all items; unverified items are hidden on public views.
+No auth required. Returns only `verified: true` items.
 
 ---
 
-### Submit for Verification
+### Update Portfolio Item
+
+```
+PUT /portfolio/items/{itemId}
+Authorization: Bearer <token>
+```
+
+**Response 200** — returns updated item.
+
+---
+
+### Delete Portfolio Item
+
+```
+DELETE /portfolio/items/{itemId}
+Authorization: Bearer <token>
+```
+
+**Response 204** — no body.
+
+---
+
+### Request AI Verification
 
 ```
 POST /portfolio/items/{itemId}/verify
 Authorization: Bearer <token>
 ```
 
-No body required. Creates a verification request with status `PENDING`.
+No body required. Calls Claude AI synchronously to assess the item. Returns the AI decision immediately.
+
+**Response 200**
+```json
+{
+  "id": "uuid",
+  "portfolioItemId": "uuid",
+  "status": "APPROVED",
+  "reviewerNote": "Clear project with a public repository and detailed description.",
+  "reviewSource": "AI",
+  "requestedAt": "2026-06-28T14:00:00Z",
+  "reviewedAt": "2026-06-28T14:00:03Z"
+}
+```
+
+`status` values: `APPROVED`, `REJECTED`, `PENDING` (fallback when Claude is unavailable).  
+`reviewSource` values: `AI`, `HUMAN`, `PENDING_FALLBACK`.
+
+**409 Conflict** — if a pending verification request already exists for this item.
 
 ---
 
-### Admin — Review Verification
+### Admin — Override Verification
 
 ```
 PATCH /portfolio/verification/{requestId}
@@ -297,6 +359,8 @@ Authorization: Bearer <token>   (ADMIN role required)
   "reviewerNote": "GitHub repo confirms this is the student's own work."
 }
 ```
+
+**Response 200** — `reviewSource` will be `"HUMAN"`.
 
 ---
 
@@ -316,76 +380,281 @@ Authorization: Bearer <token>
 
 ---
 
-## interview-service — Port 8005
-
-### Start Session
+### Batch Create Items
 
 ```
-POST /interview/sessions
+POST /portfolio/items/batch
 Authorization: Bearer <token>
 ```
 
 ```json
 {
-  "careerPath": "Software Engineer",
-  "experienceLevel": "ENTRY"
-}
-```
-
-**Response 201**
-```json
-{
-  "sessionId": "uuid",
-  "questions": [
-    { "id": "uuid", "order": 1, "text": "Tell me about a project you are proud of." },
-    { "id": "uuid", "order": 2, "text": "How do you approach debugging a problem you have never seen before?" }
+  "items": [
+    { "itemType": "PROJECT", "title": "E-commerce API", "description": "Spring Boot REST API", "externalUrl": "https://github.com/user/repo" },
+    { "itemType": "CERTIFICATION", "title": "AWS CCP", "description": "Cloud certification", "externalUrl": null }
   ]
 }
 ```
+
+**Response 201** — returns array of created `PortfolioItemResponse` objects. Atomic: all items saved or none.
+
+**400 Bad Request** — if `items` is empty, null, or contains more than 50 entries.
+
+---
+
+### Extract Portfolio Items from CV
+
+```
+POST /portfolio/extract
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+Upload a CV (PDF or DOCX, max 5MB). Claude AI extracts portfolio-worthy items.
+
+**Response 200**
+```json
+[
+  { "itemType": "PROJECT", "title": "E-commerce API", "description": "Spring Boot REST API", "externalUrl": "https://github.com/user/repo", "confidence": 0.9 },
+  { "itemType": "CERTIFICATION", "title": "AWS CCP", "description": "Cloud certification", "externalUrl": null, "confidence": 0.85 }
+]
+```
+
+Returns empty array `[]` if no portfolio-worthy items found. Items are NOT persisted — student must batch-save selected items via `POST /portfolio/items/batch`.
+
+**400 Bad Request** — file too large, unsupported type, or password-protected PDF.  
+**503 Service Unavailable** — Claude API unavailable.
+
+---
+
+### Extract Portfolio Items from Website URL
+
+```
+POST /portfolio/extract-url
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{ "url": "https://github.com/username" }
+```
+
+Fetches the page, Claude extracts portfolio-worthy items. Same response shape as CV extraction.
+
+**400 Bad Request** — invalid URL or non-HTML content type.  
+**502 Bad Gateway** — URL unreachable or returned non-200.  
+**503 Service Unavailable** — Claude API unavailable.
+
+---
+
+## mock-interview-service — Port 8005
+
+AI-powered mock interviews. A student picks a target role and difficulty; Claude generates 3–7 questions. The student answers one at a time and Claude scores each answer (0–10) with feedback. On completion Claude produces an overall score (0–100) and summary. Base path `/mock-interview`, isolated schema `mock_interview`.
+
+### Health
+
+```
+GET /mock-interview/health
+```
+
+Public — no auth required.
+
+**Response 200**
+```json
+{ "status": "UP" }
+```
+
+---
+
+### Start Session
+
+```
+POST /mock-interview/sessions
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "targetRole": "Backend Developer",
+  "difficulty": "ENTRY"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| targetRole | String | Required, non-blank, max 200 chars |
+| difficulty | String | Required, one of `ENTRY` \| `MID` \| `SENIOR` (case-sensitive) |
+
+**Response 201** — session with 3–7 generated questions.
+```json
+{
+  "id": "uuid",
+  "targetRole": "Backend Developer",
+  "difficulty": "ENTRY",
+  "status": "IN_PROGRESS",
+  "overallScore": null,
+  "overallFeedback": null,
+  "createdAt": "2026-07-08T10:00:00Z",
+  "completedAt": null,
+  "questions": [
+    {
+      "id": "uuid",
+      "questionText": "Explain the difference between REST and GraphQL.",
+      "category": "TECHNICAL",
+      "orderIndex": 1,
+      "userAnswer": null,
+      "score": null,
+      "feedback": null,
+      "answeredAt": null
+    }
+  ]
+}
+```
+
+**Errors**: 400 (blank role / invalid or wrong-case difficulty), 401, 503 (Claude unavailable or returned zero questions)
+
+---
+
+### List Sessions
+
+```
+GET /mock-interview/sessions
+Authorization: Bearer <token>
+```
+
+Returns the caller's sessions, newest first. No `questions` array in summaries.
+
+**Response 200**
+```json
+[
+  {
+    "id": "uuid",
+    "targetRole": "Backend Developer",
+    "difficulty": "ENTRY",
+    "status": "COMPLETED",
+    "overallScore": 72,
+    "createdAt": "2026-07-08T10:00:00Z"
+  }
+]
+```
+
+**Errors**: 401
+
+---
+
+### Get Session
+
+```
+GET /mock-interview/sessions/{sessionId}
+Authorization: Bearer <token>
+```
+
+Full session including all questions, answers, scores, and feedback. This is the resume mechanism — the client resumes at the question with the lowest `orderIndex` whose `userAnswer` is `null`.
+
+**Response 200** — same shape as POST /sessions response.
+
+**Errors**: 401, 404 (not found or not owned by caller)
 
 ---
 
 ### Submit Answer
 
 ```
-POST /interview/sessions/{sessionId}/answers
+POST /mock-interview/sessions/{sessionId}/questions/{questionId}/answer
 Authorization: Bearer <token>
 ```
 
 ```json
+{ "answer": "I would use REST for simple CRUD operations because..." }
+```
+
+| Field | Type | Description |
+|---|---|---|
+| answer | String | Required, non-blank, max 5000 chars |
+
+**Response 200** — Claude evaluates the answer (0–10) with feedback.
+```json
 {
-  "questionId": "uuid",
-  "answerText": "I recently built a student result management system...",
-  "inputType": "TEXT"
+  "id": "uuid",
+  "questionText": "Explain the difference between REST and GraphQL.",
+  "category": "TECHNICAL",
+  "orderIndex": 1,
+  "userAnswer": "I would use REST for simple CRUD operations because...",
+  "score": 7,
+  "feedback": "Good grasp of REST fundamentals. Missing: GraphQL's type system and query flexibility.",
+  "answeredAt": "2026-07-08T10:05:00Z"
 }
 ```
+
+**Errors**: 400 (blank answer), 401, 404 (session/question not found or not owned), 409 (question already answered, or session already completed), 503 (Claude unavailable)
+
+---
+
+### Transcribe Voice Answer (US6)
+
+```
+POST /mock-interview/sessions/{sessionId}/questions/{questionId}/transcribe
+Authorization: Bearer <token>
+Content-Type: multipart/form-data
+```
+
+Accepts an audio recording of a spoken answer. Audio is forwarded in-memory to a self-hosted faster-whisper service; the transcript text is returned to the client. **Audio is never persisted** — the client must then submit the (possibly edited) transcript text via the existing [Submit Answer](#submit-answer) endpoint to drive Claude evaluation.
+
+This is a non-reasoning speech-to-text utility endpoint added by the voice amendment (FR-014/015). It reuses the ownership and immutability guards of `/answer` so a voice user cannot bypass them.
+
+| Part | Type | Description |
+|---|---|---|
+| `audio` | file | Required. Audio/mpeg, audio/m4a, or audio/wav. Max 25 MB. |
+
+**Response 200**
+```json
+{ "transcript": "I would use REST for simple CRUD operations because..." }
+```
+
+The client populates the same `TextInput` used for typed answers so the user can edit any mis-transcribed words (technical terms especially) before tapping **Submit Answer**.
+
+**Errors**: 400 (missing part / oversize / wrong mimetype), 401, 404 (session/question not found or not owned), 409 (question already answered, or session already completed), 422 (no speech detected — `{"error":"No speech detected","status":422}` when Whisper returns empty/whitespace-only), 503 (Whisper unavailable)
+
+---
+
+### Complete Session
+
+```
+POST /mock-interview/sessions/{sessionId}/complete
+Authorization: Bearer <token>
+```
+
+No request body. Requires all questions to be answered. Claude generates the overall score (0–100) and summary, and marks the session `COMPLETED`.
 
 **Response 200**
 ```json
 {
-  "answerId": "uuid",
-  "feedback": {
-    "contentScore": 72,
-    "structureScore": 65,
-    "feedbackText": "Your answer demonstrates relevant experience...",
-    "improvementPoints": [
-      "Quantify the impact — how many students used the system?",
-      "Use the STAR structure: Situation, Task, Action, Result."
-    ]
-  }
+  "id": "uuid",
+  "targetRole": "Backend Developer",
+  "difficulty": "ENTRY",
+  "status": "COMPLETED",
+  "overallScore": 68,
+  "overallFeedback": "You demonstrated solid REST understanding... Focus on system design for your next practice.",
+  "createdAt": "2026-07-08T10:00:00Z",
+  "completedAt": "2026-07-08T10:20:00Z",
+  "questions": []
 }
 ```
 
+**Errors**: 401, 404, 409 (already completed), 422 (not all questions answered), 503 (Claude unavailable)
+
 ---
 
-### Get Session History
+### Delete Session
 
 ```
-GET /interview/sessions
+DELETE /mock-interview/sessions/{sessionId}
 Authorization: Bearer <token>
 ```
 
-Returns list of all past sessions with scores.
+**Response 204** — no body. Questions cascade-delete.
+
+**Errors**: 401, 404 (not found or not owned)
 
 ---
 

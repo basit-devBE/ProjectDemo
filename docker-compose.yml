@@ -21,6 +21,7 @@ services:
     build:
       context: ./backend/auth-service
       dockerfile: Dockerfile
+      network: host
     container_name: skillbridge-auth
     ports:
       - "8001:8001"
@@ -39,6 +40,7 @@ services:
     build:
       context: ./backend/career-service
       dockerfile: Dockerfile
+      network: host
     container_name: skillbridge-career
     ports:
       - "8002:8002"
@@ -57,6 +59,7 @@ services:
     build:
       context: ./backend/skill-gap-service
       dockerfile: Dockerfile
+      network: host
     container_name: skillbridge-skill-gap
     ports:
       - "8003:8003"
@@ -74,6 +77,68 @@ services:
       postgres:
         condition: service_healthy
 
+  portfolio-service:
+    build:
+      context: ./backend/portfolio-service
+      dockerfile: Dockerfile
+      network: host
+    container_name: skillbridge-portfolio
+    ports:
+      - "8004:8004"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      SERVER_PORT: 8004
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mock-interview-service:
+    build:
+      context: ./backend/mock-interview-service
+      dockerfile: Dockerfile
+      network: host
+    container_name: skillbridge-mock-interview
+    ports:
+      - "8005:8005"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      WHISPER_URL: http://whisper-service:9000
+      WHISPER_TIMEOUT_MS: 60000
+      WHISPER_STARTUP_PROBE: "true"
+      SERVER_PORT: 8005
+    depends_on:
+      postgres:
+        condition: service_healthy
+      whisper-service:
+        condition: service_healthy
+
+  whisper-service:
+    # TODO: pin to a specific digest before prod for reproducible local dev (plan FR-014 note)
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: skillbridge-whisper
+    ports:
+      - "9006:9000"
+    environment:
+      ASR_MODEL: small
+      ASR_ENGINE: faster_whisper
+    volumes:
+      - whisper-model-cache:/root/.cache/huggingface
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:9000/openapi.json')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
   gateway:
     image: nginx:alpine
     container_name: skillbridge-gateway
@@ -85,7 +150,10 @@ services:
       - auth-service
       - career-service
       - skill-gap-service
+      - portfolio-service
+      - mock-interview-service
 
 volumes:
   postgres_data:
   skillgap_uploads:
+  whisper-model-cache:

@@ -62,7 +62,7 @@ management:
 ```
 
 **Priority:** Add to `auth-service` first (already built), then apply the same config when each new service is scaffolded.
-
+    
 ---
 
 ## API Gateway

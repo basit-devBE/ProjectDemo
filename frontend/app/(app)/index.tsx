@@ -197,7 +197,7 @@ export default function DashboardScreen() {
         ) : nextMilestone && nextCfg ? (
           <TouchableOpacity
             style={styles.upNextCard}
-            onPress={() => router.push('./roadmap')}
+            onPress={() => router.push('./career')}
             activeOpacity={0.82}
           >
             <View style={styles.upNextHeader}>
@@ -222,7 +222,7 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
         ) : !roadmap ? (
-          <TouchableOpacity style={styles.noRoadmapCard} onPress={() => router.push('./career-paths')} activeOpacity={0.82}>
+          <TouchableOpacity style={styles.noRoadmapCard} onPress={() => router.push('./career')} activeOpacity={0.82}>
             <View style={styles.noRoadmapIconWrap}>
               <Ionicons name="compass-outline" size={28} color={colors.tertiary} />
             </View>
@@ -246,21 +246,15 @@ export default function DashboardScreen() {
         <Text style={styles.sectionLabel}>Quick Access</Text>
         <View style={styles.quickLinkGrid}>
           <QuickLink
-            icon="map-outline"
-            label="Roadmap"
-            color={colors.secondary}
-            onPress={() => router.push('./roadmap')}
-          />
-          <QuickLink
             icon="compass-outline"
-            label="Career Paths"
-            color={colors.tertiary}
-            onPress={() => router.push('./career-paths')}
+            label="Career"
+            color={colors.secondary}
+            onPress={() => router.push('./career')}
           />
           <QuickLink
             icon="person-outline"
             label="Profile"
-            color={colors.onSurfaceVariant}
+            color={colors.tertiary}
             onPress={() => router.push('./profile')}
           />
           <QuickLink
@@ -269,23 +263,23 @@ export default function DashboardScreen() {
             color={colors.secondary}
             onPress={() => router.push('./skill-gap')}
           />
+          <QuickLink
+            icon="folder-open-outline"
+            label="Portfolio"
+            color={colors.primary}
+            onPress={() => router.push('./portfolio')}
+          />
+          <QuickLink
+            icon="mic-outline"
+            label="Interview"
+            color={colors.tertiary}
+            onPress={() => router.push('./mock-interview')}
+          />
         </View>
 
         {/* Coming soon */}
         <Text style={styles.sectionLabel}>Coming Soon</Text>
         <View style={styles.comingSoonList}>
-          <ComingSoonCard
-            icon="folder-open-outline"
-            title="Portfolio Builder"
-            subtitle="Showcase your projects and achievements"
-            color={colors.onSurfaceVariant}
-          />
-          <ComingSoonCard
-            icon="mic-outline"
-            title="Mock Interviews"
-            subtitle="AI-powered practice with instant feedback"
-            color={colors.onSurfaceVariant}
-          />
           <ComingSoonCard
             icon="briefcase-outline"
             title="Internship Matches"
@@ -564,6 +558,7 @@ const styles = StyleSheet.create({
   },
   quickLinkGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.lg,
   },
