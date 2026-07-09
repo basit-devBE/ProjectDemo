@@ -269,17 +269,17 @@ export default function DashboardScreen() {
             color={colors.primary}
             onPress={() => router.push('./portfolio')}
           />
+          <QuickLink
+            icon="mic-outline"
+            label="Interview"
+            color={colors.tertiary}
+            onPress={() => router.push('./mock-interview')}
+          />
         </View>
 
         {/* Coming soon */}
         <Text style={styles.sectionLabel}>Coming Soon</Text>
         <View style={styles.comingSoonList}>
-          <ComingSoonCard
-            icon="mic-outline"
-            title="Mock Interviews"
-            subtitle="AI-powered practice with instant feedback"
-            color={colors.onSurfaceVariant}
-          />
           <ComingSoonCard
             icon="briefcase-outline"
             title="Internship Matches"
@@ -558,6 +558,7 @@ const styles = StyleSheet.create({
   },
   quickLinkGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.lg,
   },

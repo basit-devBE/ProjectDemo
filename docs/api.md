@@ -447,76 +447,187 @@ Fetches the page, Claude extracts portfolio-worthy items. Same response shape as
 
 ---
 
-## interview-service — Port 8005
+## mock-interview-service — Port 8005
+
+AI-powered mock interviews. A student picks a target role and difficulty; Claude generates 3–7 questions. The student answers one at a time and Claude scores each answer (0–10) with feedback. On completion Claude produces an overall score (0–100) and summary. Base path `/mock-interview`, isolated schema `mock_interview`.
+
+### Health
+
+```
+GET /mock-interview/health
+```
+
+Public — no auth required.
+
+**Response 200**
+```json
+{ "status": "UP" }
+```
+
+---
 
 ### Start Session
 
 ```
-POST /interview/sessions
+POST /mock-interview/sessions
 Authorization: Bearer <token>
 ```
 
 ```json
 {
-  "careerPath": "Software Engineer",
-  "experienceLevel": "ENTRY"
+  "targetRole": "Backend Developer",
+  "difficulty": "ENTRY"
 }
 ```
 
-**Response 201**
+| Field | Type | Description |
+|---|---|---|
+| targetRole | String | Required, non-blank, max 200 chars |
+| difficulty | String | Required, one of `ENTRY` \| `MID` \| `SENIOR` (case-sensitive) |
+
+**Response 201** — session with 3–7 generated questions.
 ```json
 {
-  "sessionId": "uuid",
+  "id": "uuid",
+  "targetRole": "Backend Developer",
+  "difficulty": "ENTRY",
+  "status": "IN_PROGRESS",
+  "overallScore": null,
+  "overallFeedback": null,
+  "createdAt": "2026-07-08T10:00:00Z",
+  "completedAt": null,
   "questions": [
-    { "id": "uuid", "order": 1, "text": "Tell me about a project you are proud of." },
-    { "id": "uuid", "order": 2, "text": "How do you approach debugging a problem you have never seen before?" }
+    {
+      "id": "uuid",
+      "questionText": "Explain the difference between REST and GraphQL.",
+      "category": "TECHNICAL",
+      "orderIndex": 1,
+      "userAnswer": null,
+      "score": null,
+      "feedback": null,
+      "answeredAt": null
+    }
   ]
 }
 ```
+
+**Errors**: 400 (blank role / invalid or wrong-case difficulty), 401, 503 (Claude unavailable or returned zero questions)
+
+---
+
+### List Sessions
+
+```
+GET /mock-interview/sessions
+Authorization: Bearer <token>
+```
+
+Returns the caller's sessions, newest first. No `questions` array in summaries.
+
+**Response 200**
+```json
+[
+  {
+    "id": "uuid",
+    "targetRole": "Backend Developer",
+    "difficulty": "ENTRY",
+    "status": "COMPLETED",
+    "overallScore": 72,
+    "createdAt": "2026-07-08T10:00:00Z"
+  }
+]
+```
+
+**Errors**: 401
+
+---
+
+### Get Session
+
+```
+GET /mock-interview/sessions/{sessionId}
+Authorization: Bearer <token>
+```
+
+Full session including all questions, answers, scores, and feedback. This is the resume mechanism — the client resumes at the question with the lowest `orderIndex` whose `userAnswer` is `null`.
+
+**Response 200** — same shape as POST /sessions response.
+
+**Errors**: 401, 404 (not found or not owned by caller)
 
 ---
 
 ### Submit Answer
 
 ```
-POST /interview/sessions/{sessionId}/answers
+POST /mock-interview/sessions/{sessionId}/questions/{questionId}/answer
 Authorization: Bearer <token>
 ```
 
 ```json
+{ "answer": "I would use REST for simple CRUD operations because..." }
+```
+
+| Field | Type | Description |
+|---|---|---|
+| answer | String | Required, non-blank, max 5000 chars |
+
+**Response 200** — Claude evaluates the answer (0–10) with feedback.
+```json
 {
-  "questionId": "uuid",
-  "answerText": "I recently built a student result management system...",
-  "inputType": "TEXT"
+  "id": "uuid",
+  "questionText": "Explain the difference between REST and GraphQL.",
+  "category": "TECHNICAL",
+  "orderIndex": 1,
+  "userAnswer": "I would use REST for simple CRUD operations because...",
+  "score": 7,
+  "feedback": "Good grasp of REST fundamentals. Missing: GraphQL's type system and query flexibility.",
+  "answeredAt": "2026-07-08T10:05:00Z"
 }
 ```
+
+**Errors**: 400 (blank answer), 401, 404 (session/question not found or not owned), 409 (question already answered, or session already completed), 503 (Claude unavailable)
+
+---
+
+### Complete Session
+
+```
+POST /mock-interview/sessions/{sessionId}/complete
+Authorization: Bearer <token>
+```
+
+No request body. Requires all questions to be answered. Claude generates the overall score (0–100) and summary, and marks the session `COMPLETED`.
 
 **Response 200**
 ```json
 {
-  "answerId": "uuid",
-  "feedback": {
-    "contentScore": 72,
-    "structureScore": 65,
-    "feedbackText": "Your answer demonstrates relevant experience...",
-    "improvementPoints": [
-      "Quantify the impact — how many students used the system?",
-      "Use the STAR structure: Situation, Task, Action, Result."
-    ]
-  }
+  "id": "uuid",
+  "targetRole": "Backend Developer",
+  "difficulty": "ENTRY",
+  "status": "COMPLETED",
+  "overallScore": 68,
+  "overallFeedback": "You demonstrated solid REST understanding... Focus on system design for your next practice.",
+  "createdAt": "2026-07-08T10:00:00Z",
+  "completedAt": "2026-07-08T10:20:00Z",
+  "questions": []
 }
 ```
 
+**Errors**: 401, 404, 409 (already completed), 422 (not all questions answered), 503 (Claude unavailable)
+
 ---
 
-### Get Session History
+### Delete Session
 
 ```
-GET /interview/sessions
+DELETE /mock-interview/sessions/{sessionId}
 Authorization: Bearer <token>
 ```
 
-Returns list of all past sessions with scores.
+**Response 204** — no body. Questions cascade-delete.
+
+**Errors**: 401, 404 (not found or not owned)
 
 ---
 

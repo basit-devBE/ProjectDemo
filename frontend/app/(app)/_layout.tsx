@@ -89,6 +89,20 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="mock-interview"
+        options={{
+          title: 'Interview',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              name="mic-outline"
+              focusedName="mic"
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
@@ -111,6 +125,20 @@ export default function AppLayout() {
       />
       <Tabs.Screen
         name="portfolio-review"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="mock-interview-session"
+        options={{
+          href: null,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
+        name="mock-interview-report"
         options={{
           href: null,
           tabBarStyle: { display: 'none' },

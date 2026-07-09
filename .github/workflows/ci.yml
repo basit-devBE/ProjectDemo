@@ -22,6 +22,8 @@ jobs:
             path: backend/skill-gap-service
           - service: portfolio-service
             path: backend/portfolio-service
+          - service: mock-interview-service
+            path: backend/mock-interview-service
 
     steps:
       - uses: actions/checkout@v4
