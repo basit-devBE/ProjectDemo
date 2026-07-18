@@ -348,6 +348,11 @@ SkillBridge AI uses **PostgreSQL 16**. Each microservice owns an isolated schema
 
 ### `challenge.leaderboard_entries`
 
+> **v1 note**: not created. The leaderboard is computed at request time from
+> `challenge.submissions.score` (score DESC, submitted_at ASC) — see
+> `specs/010-challenge-service/research.md` Decision 2. This table remains the
+> designated materialization if a cache is ever needed.
+
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | id | UUID | PK | — |

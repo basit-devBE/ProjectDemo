@@ -834,7 +834,9 @@ GET /matching/health
 
 ## challenge-service — Port 8007
 
-### Post Challenge (Company)
+Full contract with all fields: `specs/010-challenge-service/contracts/challenge-api.md`.
+
+### Post Challenge (Recruiter)
 
 ```
 POST /challenge
@@ -844,34 +846,60 @@ Authorization: Bearer <token>   (RECRUITER role required)
 ```json
 {
   "title": "Build a Fraud Detection API",
-  "description": "Design and implement an API that...",
+  "description": "Design and implement an API that flags fraudulent mobile-money transactions",
   "submissionFormat": "GitHub repository link with a README explaining your approach",
-  "deadline": "2026-07-15T23:59:00Z"
+  "deadline": "2026-08-15T23:59:00Z"
 }
 ```
 
+**Response 201** — the created challenge (`active: true`, `submissionCount: 0`).
+
+**Errors**: 400 (blank title/description/submissionFormat, missing or past deadline), 401, 403 (non-RECRUITER)
+
 ---
 
-### Get All Challenges
+### Browse Active Challenges
 
 ```
 GET /challenge
+Authorization: Bearer <token>
 ```
 
-No auth required. Returns all active challenges.
+Active, non-expired challenges ordered `createdAt` DESC. Each entry carries a `submitted` flag (true when the calling STUDENT already submitted; always false for RECRUITER callers).
+
+**Response 200** — `{ "challenges": [ ... ] }`
+
+**Errors**: 401
 
 ---
 
-### Submit Solution
+### Submit Solution (Student)
 
 ```
 POST /challenge/{challengeId}/submissions
-Authorization: Bearer <token>
+Authorization: Bearer <token>   (STUDENT role required)
 ```
 
 ```json
 { "submissionUrl": "https://github.com/username/fraud-detection-api" }
 ```
+
+**Response 201** — the recorded submission with `score: null`. One submission per student per challenge; no edits in v1.
+
+**Errors**: 400 (blank/malformed URL), 401, 403 (non-STUDENT), 404 (unknown/inactive/expired challenge), 409 (already submitted)
+
+---
+
+### Get My Submissions (Student)
+
+```
+GET /challenge/my-submissions
+Authorization: Bearer <token>   (STUDENT role required)
+```
+
+Own submissions across all challenges (including expired/deactivated — history preserved), ordered `submittedAt` DESC, each with the challenge summary and current `score` (null until scored).
+
+**Errors**: 401, 403 (non-STUDENT)
 
 ---
 
@@ -879,18 +907,89 @@ Authorization: Bearer <token>
 
 ```
 GET /challenge/{challengeId}/leaderboard
+Authorization: Bearer <token>
 ```
+
+Scored submissions only, ordered `score` DESC, tie-broken by `submittedAt` ASC, 1-based `rank`. Viewable for expired/deactivated challenges. Entries carry `studentId` only (no names — see spec Assumptions).
 
 **Response 200**
 ```json
 {
   "challengeId": "uuid",
   "entries": [
-    { "rank": 1, "studentName": "Abena M.", "score": 94.5 },
-    { "rank": 2, "studentName": "Kwame A.", "score": 89.0 }
+    { "rank": 1, "studentId": "uuid", "score": 94.50 },
+    { "rank": 2, "studentId": "uuid", "score": 89.00 }
   ]
 }
 ```
+
+**Errors**: 401, 404 (unknown challenge)
+
+---
+
+### Get My Challenges (Recruiter)
+
+```
+GET /challenge/mine
+Authorization: Bearer <token>   (RECRUITER role required)
+```
+
+Own challenges (including inactive), ordered `createdAt` DESC, each with a live `submissionCount`.
+
+**Errors**: 401, 403 (non-RECRUITER)
+
+---
+
+### Review Submissions (Recruiter, owner)
+
+```
+GET /challenge/{challengeId}/submissions
+Authorization: Bearer <token>   (RECRUITER role required, must own challenge)
+```
+
+All submissions to an own challenge (studentId, submissionUrl, score, submittedAt), ordered `submittedAt` DESC.
+
+**Errors**: 401, 403 (non-RECRUITER), 404 (unknown or not-owned challenge)
+
+---
+
+### Score Submission (Recruiter, owner)
+
+```
+POST /challenge/{challengeId}/submissions/{submissionId}/score
+Authorization: Bearer <token>   (RECRUITER role required, must own challenge)
+```
+
+```json
+{ "score": 85.50 }
+```
+
+Assigns or revises the score (upsert). Inclusive range 0.00–100.00, at most 2 decimal places. Available after the deadline and after deactivation — evaluation happens after the submission window closes.
+
+**Errors**: 400 (missing/out-of-range/over-precision score), 401, 403 (non-RECRUITER), 404 (unknown/not-owned challenge, or submission not in challenge)
+
+---
+
+### Deactivate Challenge (Recruiter, owner)
+
+```
+POST /challenge/{challengeId}/deactivate
+Authorization: Bearer <token>   (RECRUITER role required, must own challenge)
+```
+
+Sets `active: false`: the challenge leaves the browse list and rejects new submissions; existing submissions and scores are preserved and the leaderboard stays viewable. Idempotent.
+
+**Errors**: 401, 403 (non-RECRUITER), 404 (unknown or not-owned challenge)
+
+---
+
+### Health (public)
+
+```
+GET /challenge/health
+```
+
+**Response 200** — `{ "status": "UP" }`
 
 ---
 

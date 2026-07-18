@@ -117,7 +117,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      whisper-service:
+  challenge-service:
+    build:
+      context: ./backend/challenge-service
+      dockerfile: Dockerfile
+      network: host
+    container_name: skillbridge-challenge
+    ports:
+      - "8007:8007"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      SERVER_PORT: 8007
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  whisper-service:
         condition: service_healthy
 
   matching-service:
@@ -171,6 +189,7 @@ services:
       - portfolio-service
       - mock-interview-service
       - matching-service
+      - challenge-service
 
 volumes:
   postgres_data:

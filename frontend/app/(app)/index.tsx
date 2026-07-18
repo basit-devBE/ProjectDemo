@@ -263,6 +263,18 @@ export default function DashboardScreen() {
               )
             }
           />
+          <QuickLink
+            icon="trophy-outline"
+            label="Challenges"
+            color={colors.secondary}
+            onPress={() =>
+              router.push(
+                user?.role === 'RECRUITER'
+                  ? './challenges-manage'
+                  : './challenges'
+              )
+            }
+          />
         </View>
 
       </ScrollView>

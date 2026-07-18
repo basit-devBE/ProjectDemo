@@ -26,6 +26,8 @@ jobs:
             path: backend/mock-interview-service
           - service: matching-service
             path: backend/matching-service
+          - service: challenge-service
+            path: backend/challenge-service
 
     steps:
       - uses: actions/checkout@v4
