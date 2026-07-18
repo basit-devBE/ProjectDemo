@@ -54,30 +54,6 @@ function QuickLink({ icon, label, color, onPress }: QuickLinkProps) {
   );
 }
 
-interface ComingSoonCardProps {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle: string;
-  color: string;
-}
-
-function ComingSoonCard({ icon, title, subtitle, color }: ComingSoonCardProps) {
-  return (
-    <View style={styles.comingSoonCard}>
-      <View style={[styles.comingSoonIcon, { backgroundColor: `${color}12` }]}>
-        <Ionicons name={icon} size={18} color={`${color}99`} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.comingSoonTitle}>{title}</Text>
-        <Text style={styles.comingSoonSubtitle} numberOfLines={1}>{subtitle}</Text>
-      </View>
-      <View style={styles.soonPill}>
-        <Text style={styles.soonPillText}>Soon</Text>
-      </View>
-    </View>
-  );
-}
-
 export default function DashboardScreen() {
   const { state } = useAuth();
   const user = state.user;
@@ -275,16 +251,17 @@ export default function DashboardScreen() {
             color={colors.tertiary}
             onPress={() => router.push('./mock-interview')}
           />
-        </View>
-
-        {/* Coming soon */}
-        <Text style={styles.sectionLabel}>Coming Soon</Text>
-        <View style={styles.comingSoonList}>
-          <ComingSoonCard
+          <QuickLink
             icon="briefcase-outline"
-            title="Internship Matches"
-            subtitle="Opportunities tailored to your profile"
-            color={colors.onSurfaceVariant}
+            label="Opportunities"
+            color={colors.primary}
+            onPress={() =>
+              router.push(
+                user?.role === 'RECRUITER'
+                  ? './opportunities-manage'
+                  : './opportunities'
+              )
+            }
           />
         </View>
 
@@ -586,52 +563,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 11,
   },
-
-  /* Coming soon list */
-  comingSoonList: {
-    backgroundColor: colors.surfaceCard,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    overflow: 'hidden',
-  },
-  comingSoonCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.outlineVariant,
-  },
-  comingSoonIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  comingSoonTitle: {
-    fontFamily: 'Inter_500Medium',
-    fontSize: 14,
-    color: colors.onSurfaceVariant,
-    marginBottom: 2,
-  },
-  comingSoonSubtitle: {
-    ...typography.labelSm,
-    color: colors.outline,
-    fontFamily: 'Inter_400Regular',
-    fontSize: 11,
-  },
-  soonPill: {
-    backgroundColor: colors.surfaceContainerLow,
-    borderRadius: radius.full,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: colors.outlineVariant,
-    flexShrink: 0,
-  },
-  soonPillText: { ...typography.labelSm, color: colors.outline, fontSize: 10 },
 });

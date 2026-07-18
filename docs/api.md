@@ -660,33 +660,7 @@ Authorization: Bearer <token>
 
 ## matching-service — Port 8006
 
-### Get Matches for Student
-
-```
-GET /matching/opportunities
-Authorization: Bearer <token>
-```
-
-**Response 200**
-```json
-{
-  "matches": [
-    {
-      "opportunity": {
-        "id": "uuid",
-        "title": "Software Engineering Intern",
-        "company": "Hubtel",
-        "location": "Accra",
-        "deadline": "2026-08-31"
-      },
-      "matchScore": 87.4,
-      "rank": 1
-    }
-  ]
-}
-```
-
----
+Full contract with all fields: `specs/009-matching-service/contracts/matching-api.md`.
 
 ### Post Opportunity (Recruiter)
 
@@ -698,24 +672,163 @@ Authorization: Bearer <token>   (RECRUITER role required)
 ```json
 {
   "title": "Software Engineering Intern",
+  "companyName": "Hubtel",
   "description": "...",
   "location": "Accra",
   "opportunityType": "INTERNSHIP",
   "deadline": "2026-08-31",
-  "requiredSkills": ["Java", "Spring Boot", "PostgreSQL"]
+  "externalUrl": "https://hubtel.com/careers/se-intern-2026",
+  "requiredSkills": [
+    { "skillName": "Java", "required": true },
+    { "skillName": "Spring Boot", "required": true },
+    { "skillName": "PostgreSQL", "required": false }
+  ]
 }
 ```
 
+**Response 201** — the created opportunity. `externalUrl` is optional: when present the listing is externally hosted; applying still records the application and returns the URL for the client to open.
+
+**Errors**: 400 (validation — blank title/description, invalid type, empty skills, past deadline, malformed externalUrl), 401, 403 (non-RECRUITER)
+
 ---
 
-### Apply to Opportunity
+### Get Ranked Matches
 
 ```
-POST /matching/opportunities/{opportunityId}/apply
+GET /matching/opportunities
 Authorization: Bearer <token>
 ```
 
-No body required. Records the application.
+Active, non-expired opportunities scored against the caller's stored skill profile
+(must-have skills weigh 2× nice-to-have; `score = 100 × matched weight / total weight`),
+ordered `matchScore` DESC.
+
+**Response 200**
+```json
+{
+  "matches": [
+    {
+      "opportunity": {
+        "id": "uuid",
+        "title": "Software Engineering Intern",
+        "companyName": "Hubtel",
+        "location": "Accra",
+        "opportunityType": "INTERNSHIP",
+        "deadline": "2026-08-31",
+        "externalUrl": null,
+        "active": true,
+        "createdAt": "2026-07-18T10:00:00Z",
+        "description": "...",
+        "requiredSkills": [ { "skillName": "Java", "required": true } ],
+        "applicantCount": null
+      },
+      "matchScore": 80.00,
+      "rank": 1,
+      "applied": false
+    }
+  ]
+}
+```
+
+**Errors**: 401
+
+---
+
+### Apply to Opportunity (Student)
+
+```
+POST /matching/opportunities/{opportunityId}/apply
+Authorization: Bearer <token>   (STUDENT role required)
+```
+
+No body required. Records the application (also for external postings — click-tracking).
+
+**Response 201**
+```json
+{ "id": "uuid", "opportunityId": "uuid", "appliedAt": "2026-07-18T10:05:00Z", "externalUrl": null }
+```
+
+**Errors**: 401, 403 (non-STUDENT), 404 (unknown/inactive/expired), 409 (already applied)
+
+---
+
+### Get My Applications (Student)
+
+```
+GET /matching/applications
+Authorization: Bearer <token>   (STUDENT role required)
+```
+
+**Response 200** — `[{ id, appliedAt, opportunity }]` ordered newest-first.
+
+**Errors**: 401, 403 (non-STUDENT)
+
+---
+
+### Get / Replace My Skill Profile (Student)
+
+```
+GET /matching/profile/skills
+PUT /matching/profile/skills
+Authorization: Bearer <token>   (STUDENT role required)
+```
+
+PUT body: `{ "skills": ["Java", "Spring Boot"] }` (0–50 entries; full replacement;
+duplicates collapse case-insensitively).
+
+**Response 200** — `{ "skills": ["Java", "Spring Boot"] }`
+
+**Errors**: 400 (>50 skills, blank/oversized entry), 401, 403 (non-STUDENT)
+
+---
+
+### Get My Postings (Recruiter)
+
+```
+GET /matching/opportunities/mine
+Authorization: Bearer <token>   (RECRUITER role required)
+```
+
+**Response 200** — own postings newest-first (includes inactive), with live `applicantCount`.
+
+**Errors**: 401, 403 (non-RECRUITER)
+
+---
+
+### Deactivate Own Posting (Recruiter)
+
+```
+POST /matching/opportunities/{opportunityId}/deactivate
+Authorization: Bearer <token>   (RECRUITER role required, must own the posting)
+```
+
+**Response 200** — the posting with `active: false`. Idempotent.
+
+**Errors**: 401, 403 (non-RECRUITER), 404 (unknown or not owned)
+
+---
+
+### Get Applicants for Own Posting (Recruiter)
+
+```
+GET /matching/opportunities/{opportunityId}/applications
+Authorization: Bearer <token>   (RECRUITER role required, must own the posting)
+```
+
+**Response 200** — `[{ studentId, appliedAt }]` newest-first. Student identity is the
+UUID only (no PII).
+
+**Errors**: 401, 403 (non-RECRUITER), 404 (unknown or not owned)
+
+---
+
+### Health (public)
+
+```
+GET /matching/health
+```
+
+**Response 200** — `{ "status": "UP" }`
 
 ---
 

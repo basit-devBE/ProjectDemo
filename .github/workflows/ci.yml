@@ -24,6 +24,8 @@ jobs:
             path: backend/portfolio-service
           - service: mock-interview-service
             path: backend/mock-interview-service
+          - service: matching-service
+            path: backend/matching-service
 
     steps:
       - uses: actions/checkout@v4
