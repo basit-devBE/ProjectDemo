@@ -21,11 +21,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * Constitution IV integration coverage for the stateful flows that
@@ -118,8 +120,9 @@ class MentorshipIntegrationTest {
         ThreadResponse recipientView = service.getThread(alumniId, pair.id());
         assertThat(recipientView.messages().get(0).readAt()).isNotNull();
 
+        // PostgreSQL TIMESTAMPTZ rounds to microseconds; the in-memory stamp has nanos
         ThreadResponse again = service.getThread(studentId, pair.id());
         assertThat(again.messages().get(0).readAt())
-                .isEqualTo(recipientView.messages().get(0).readAt());
+                .isCloseTo(recipientView.messages().get(0).readAt(), within(1, ChronoUnit.MICROS));
     }
 }
