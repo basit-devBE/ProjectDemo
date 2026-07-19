@@ -275,6 +275,18 @@ export default function DashboardScreen() {
               )
             }
           />
+          <QuickLink
+            icon="people-outline"
+            label="Mentorship"
+            color={colors.tertiary}
+            onPress={() =>
+              router.push(
+                user?.role === 'ALUMNI'
+                  ? './mentorship-manage'
+                  : './mentorship'
+              )
+            }
+          />
         </View>
 
       </ScrollView>

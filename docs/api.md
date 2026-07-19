@@ -995,54 +995,215 @@ GET /challenge/health
 
 ## mentorship-service — Port 8008
 
-### Get Matched Alumni
+Full contract with all fields: `specs/011-mentorship-service/contracts/mentorship-api.md`.
+
+### Get My Profile (Alumni)
 
 ```
-GET /mentorship/matches
-Authorization: Bearer <token>
+GET /mentorship/profile
+Authorization: Bearer <token>   (ALUMNI role required)
 ```
 
-Returns alumni matched to the student's career interests.
+**Response 200** — the caller's stored mentor profile (currentRole, company, industry, careerInterests, bio, available, updatedAt).
+
+**Errors**: 401, 403 (non-ALUMNI), 404 (no profile created yet)
 
 ---
 
-### Send Mentorship Request
+### Create/Replace My Profile (Alumni)
 
 ```
-POST /mentorship/requests
-Authorization: Bearer <token>
+PUT /mentorship/profile
+Authorization: Bearer <token>   (ALUMNI role required)
 ```
 
 ```json
 {
-  "alumniId": "uuid",
-  "message": "Hi, I am a Level 200 CS student interested in backend engineering..."
+  "currentRole": "Senior Backend Engineer",
+  "company": "Hubtel",
+  "industry": "Fintech",
+  "careerInterests": ["backend engineering", "fintech", "mentoring juniors"],
+  "bio": "Class of 2019. Happy to help with interview prep and career switching.",
+  "available": true
 }
 ```
 
+Full-replace upsert — creates on first call, replaces entirely afterwards. `careerInterests` required (1–20 tags, each ≤ 50 chars, trimmed and case-insensitively deduplicated); `currentRole`/`company` ≤ 150 chars, `industry` ≤ 100, `bio` ≤ 2,000; `available` required.
+
+**Response 200** — the stored, normalized profile.
+
+**Errors**: 400 (validation), 401, 403 (non-ALUMNI)
+
 ---
 
-### Send Message
+### Search Alumni (Student)
 
 ```
-POST /mentorship/pairs/{pairId}/messages
-Authorization: Bearer <token>
+GET /mentorship/alumni?interest=fintech&interest=backend%20engineering&industry=Fintech
+Authorization: Bearer <token>   (STUDENT role required)
+```
+
+Repeatable `interest` params and optional `industry`, both matched case-insensitively (exact match after trim/whitespace-collapse). Returns only `available: true` profiles, ranked by matching-tag count DESC, then `updatedAt` DESC. No filters → all available profiles, `updatedAt` DESC.
+
+**Response 200** — `{ "alumni": [ ... ] }`, each entry with `alumniId`, profile fields, and `matchingTags`. Empty result → `{ "alumni": [] }`.
+
+**Errors**: 401, 403 (non-STUDENT)
+
+---
+
+### Send Mentorship Request (Student)
+
+```
+POST /mentorship/requests
+Authorization: Bearer <token>   (STUDENT role required)
 ```
 
 ```json
-{ "body": "Thank you for the advice on the interview structure." }
+{ "alumniId": "uuid", "message": "Hi! I'm targeting backend roles and would love guidance." }
 ```
+
+`alumniId` required (the alumnus's userId from search); `message` optional, ≤ 1,000 chars.
+
+**Response 201** — the request with `status: "PENDING"`.
+
+**Errors**: 400 (missing alumniId / oversize message), 401, 403 (non-STUDENT), 404 (alumni profile unknown **or** unavailable — indistinguishable), 409 (a PENDING request or ACTIVE pair with this alumnus already exists)
 
 ---
 
-### Get Messages
+### Cancel Request (Student, sender)
 
 ```
-GET /mentorship/pairs/{pairId}/messages
+POST /mentorship/requests/{requestId}/cancel
+Authorization: Bearer <token>   (STUDENT role required, must be the sender)
+```
+
+No body. Marks the caller's own PENDING request `CANCELLED` (+ `respondedAt`) — the only student-side exit from PENDING (requests never expire automatically). Cancelling frees the student to re-request the same alumnus immediately.
+
+**Errors**: 401, 403 (non-STUDENT), 404 (unknown request or sent by a different student), 409 (already ACCEPTED/DECLINED/CANCELLED)
+
+---
+
+### Get My Requests (Student)
+
+```
+GET /mentorship/requests/mine
+Authorization: Bearer <token>   (STUDENT role required)
+```
+
+Every request the caller has sent, all statuses, ordered `createdAt` DESC. Empty → `[]`.
+
+**Errors**: 401, 403 (non-STUDENT)
+
+---
+
+### Get Incoming Requests (Alumni)
+
+```
+GET /mentorship/requests/incoming
+Authorization: Bearer <token>   (ALUMNI role required)
+```
+
+Only PENDING requests addressed to the caller, ordered `createdAt` DESC. Empty → `[]`.
+
+**Errors**: 401, 403 (non-ALUMNI)
+
+---
+
+### Accept Request (Alumni, addressee)
+
+```
+POST /mentorship/requests/{requestId}/accept
+Authorization: Bearer <token>   (ALUMNI role required, must be the addressee)
+```
+
+No body. Marks the request `ACCEPTED` (+ `respondedAt`) and creates an ACTIVE mentorship pair.
+
+**Response 200** — the new pair (`status: "ACTIVE"`, `startedAt` set).
+
+**Errors**: 401, 403 (non-ALUMNI), 404 (unknown request or addressed to a different alumnus), 409 (already resolved)
+
+---
+
+### Decline Request (Alumni, addressee)
+
+```
+POST /mentorship/requests/{requestId}/decline
+Authorization: Bearer <token>   (ALUMNI role required, must be the addressee)
+```
+
+No body. Marks the request `DECLINED` (+ `respondedAt`); no pair created. The student may re-request the same alumnus afterwards.
+
+**Errors**: 401, 403 (non-ALUMNI), 404 (unknown / not addressed to caller), 409 (already resolved)
+
+---
+
+### Get My Pairs
+
+```
+GET /mentorship/pairs/mine
 Authorization: Bearer <token>
 ```
 
-Returns paginated message thread for the mentorship pair.
+All pairs where the caller is a participant (either side), ACTIVE and ENDED, ordered `startedAt` DESC. Any authenticated role may call this — scoping is strictly by the caller's user id, so a caller with no pairs (including RECRUITER/ADMIN) gets 200 with `[]`, not 403.
+
+**Errors**: 401
+
+---
+
+### End Pair (participant)
+
+```
+POST /mentorship/pairs/{pairId}/end
+Authorization: Bearer <token>   (must be a participant)
+```
+
+No body. Sets `status: "ENDED"` + `endedAt`. Idempotent — ending an already-ENDED pair returns 200 unchanged. Message history untouched and still readable.
+
+**Errors**: 401, 404 (unknown pair or caller not a participant)
+
+---
+
+### Get Message Thread (participant)
+
+```
+GET /mentorship/pairs/{pairId}/messages
+Authorization: Bearer <token>   (must be a participant)
+```
+
+Full thread, `sentAt` ASC. Side effect: every unread message sent *to* the caller gets `readAt` stamped in the same transaction. Readable on ENDED pairs.
+
+**Response 200** — `{ "pairId": "uuid", "status": "ACTIVE", "messages": [ ... ] }`
+
+**Errors**: 401, 404 (unknown pair or caller not a participant)
+
+---
+
+### Send Message (participant)
+
+```
+POST /mentorship/pairs/{pairId}/messages
+Authorization: Bearer <token>   (must be a participant)
+```
+
+```json
+{ "body": "Thanks for accepting! Could we set up a chat about interview prep?" }
+```
+
+`body` required, non-blank, ≤ 4,000 chars.
+
+**Response 201** — the recorded message (`readAt: null`).
+
+**Errors**: 400 (blank/oversize body), 401, 404 (unknown pair / not a participant), 409 (pair is ENDED — thread is read-only)
+
+---
+
+### Health (public)
+
+```
+GET /mentorship/health
+```
+
+**Response 200** — `{ "status": "UP" }`
 
 ---
 
