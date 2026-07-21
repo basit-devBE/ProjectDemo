@@ -1,5 +1,6 @@
 package com.skillbridge.mentorship.service;
 
+import com.skillbridge.mentorship.client.NotificationClient;
 import com.skillbridge.mentorship.dto.request.SendMessageRequest;
 import com.skillbridge.mentorship.dto.request.SendRequestRequest;
 import com.skillbridge.mentorship.dto.request.UpsertProfileRequest;
@@ -41,6 +42,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,6 +56,7 @@ class MentorshipServiceImplTest {
     @Mock MentorshipPairRepository pairRepository;
     @Mock MessageRepository messageRepository;
     @Mock AlumniSearchService searchService;
+    @Mock NotificationClient notificationClient;
 
     @InjectMocks MentorshipServiceImpl service;
 
@@ -160,6 +164,35 @@ class MentorshipServiceImplTest {
     }
 
     @Test
+    void sendRequestNotifiesAlumni() {
+        when(profileRepository.findByUserId(ALUMNI_ID)).thenReturn(Optional.of(availableProfile));
+        when(requestRepository.existsByStudentIdAndAlumniIdAndStatus(STUDENT_ID, ALUMNI_ID, RequestStatus.PENDING)).thenReturn(false);
+        when(pairRepository.existsByStudentIdAndAlumniIdAndStatus(STUDENT_ID, ALUMNI_ID, PairStatus.ACTIVE)).thenReturn(false);
+        when(requestRepository.saveAndFlush(any(MentorshipRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.sendRequest(STUDENT_ID, new SendRequestRequest(ALUMNI_ID, "Hi"));
+
+        verify(notificationClient).notify(
+                eq(ALUMNI_ID),
+                eq("MENTORSHIP_REQUEST_RECEIVED"),
+                eq("New mentorship request"),
+                eq("A student has requested your mentorship."));
+    }
+
+    @Test
+    void sendRequestNotificationFailureStillSucceeds() {
+        when(profileRepository.findByUserId(ALUMNI_ID)).thenReturn(Optional.of(availableProfile));
+        when(requestRepository.existsByStudentIdAndAlumniIdAndStatus(STUDENT_ID, ALUMNI_ID, RequestStatus.PENDING)).thenReturn(false);
+        when(pairRepository.existsByStudentIdAndAlumniIdAndStatus(STUDENT_ID, ALUMNI_ID, PairStatus.ACTIVE)).thenReturn(false);
+        when(requestRepository.saveAndFlush(any(MentorshipRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new RuntimeException("down")).when(notificationClient).notify(any(), any(), any(), any());
+
+        RequestResponse response = service.sendRequest(STUDENT_ID, new SendRequestRequest(ALUMNI_ID, "Hi"));
+
+        assertThat(response.status()).isEqualTo(RequestStatus.PENDING);
+    }
+
+    @Test
     void sendRequestToUnavailableAlumnusThrows404() {
         availableProfile.setAvailable(false);
         when(profileRepository.findByUserId(ALUMNI_ID)).thenReturn(Optional.of(availableProfile));
@@ -242,6 +275,50 @@ class MentorshipServiceImplTest {
     }
 
     @Test
+    void acceptRequestNotifiesStudent() {
+        MentorshipRequest req = pendingRequest();
+        when(requestRepository.findByIdAndAlumniId(req.getId(), ALUMNI_ID)).thenReturn(Optional.of(req));
+        when(requestRepository.save(any(MentorshipRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pairRepository.save(any(MentorshipPair.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.acceptRequest(ALUMNI_ID, req.getId());
+
+        verify(notificationClient).notify(
+                eq(STUDENT_ID),
+                eq("MENTORSHIP_REQUEST_ACCEPTED"),
+                eq("Request accepted"),
+                eq("Your mentorship request was accepted — you can start chatting now."));
+    }
+
+    @Test
+    void declineRequestNotifiesStudent() {
+        MentorshipRequest req = pendingRequest();
+        when(requestRepository.findByIdAndAlumniId(req.getId(), ALUMNI_ID)).thenReturn(Optional.of(req));
+        when(requestRepository.save(any(MentorshipRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.declineRequest(ALUMNI_ID, req.getId());
+
+        verify(notificationClient).notify(
+                eq(STUDENT_ID),
+                eq("MENTORSHIP_REQUEST_DECLINED"),
+                eq("Request declined"),
+                eq("Your mentorship request was declined. You can request another mentor anytime."));
+    }
+
+    @Test
+    void acceptRequestNotificationFailureStillSucceeds() {
+        MentorshipRequest req = pendingRequest();
+        when(requestRepository.findByIdAndAlumniId(req.getId(), ALUMNI_ID)).thenReturn(Optional.of(req));
+        when(requestRepository.save(any(MentorshipRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(pairRepository.save(any(MentorshipPair.class))).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new RuntimeException("down")).when(notificationClient).notify(any(), any(), any(), any());
+
+        PairResponse response = service.acceptRequest(ALUMNI_ID, req.getId());
+
+        assertThat(response.status()).isEqualTo(PairStatus.ACTIVE);
+    }
+
+    @Test
     void respondingToResolvedRequestThrows409() {
         MentorshipRequest req = pendingRequest();
         req.setStatus(RequestStatus.ACCEPTED);
@@ -275,6 +352,64 @@ class MentorshipServiceImplTest {
         assertThat(response.body()).isEqualTo("hello");
         assertThat(response.readAt()).isNull();
         assertThat(response.senderId()).isEqualTo(STUDENT_ID);
+    }
+
+    @Test
+    void sendMessageNotifiesCounterpart() {
+        MentorshipPair pair = activePair();
+        when(pairRepository.findByIdAndParticipant(pair.getId(), STUDENT_ID)).thenReturn(Optional.of(pair));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.sendMessage(STUDENT_ID, pair.getId(), new SendMessageRequest("hello mentor"));
+
+        verify(notificationClient).notify(
+                eq(ALUMNI_ID),
+                eq("MENTORSHIP_MESSAGE"),
+                eq("New message"),
+                eq("hello mentor"));
+    }
+
+    @Test
+    void sendMessageNotifiesCounterpartWhenAlumniSends() {
+        MentorshipPair pair = activePair();
+        when(pairRepository.findByIdAndParticipant(pair.getId(), ALUMNI_ID)).thenReturn(Optional.of(pair));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.sendMessage(ALUMNI_ID, pair.getId(), new SendMessageRequest("hello student"));
+
+        verify(notificationClient).notify(
+                eq(STUDENT_ID),
+                eq("MENTORSHIP_MESSAGE"),
+                eq("New message"),
+                eq("hello student"));
+    }
+
+    @Test
+    void sendMessageLongBodyIsPreviewed() {
+        MentorshipPair pair = activePair();
+        when(pairRepository.findByIdAndParticipant(pair.getId(), STUDENT_ID)).thenReturn(Optional.of(pair));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        String body = "a".repeat(200);
+
+        service.sendMessage(STUDENT_ID, pair.getId(), new SendMessageRequest(body));
+
+        verify(notificationClient).notify(
+                eq(ALUMNI_ID),
+                eq("MENTORSHIP_MESSAGE"),
+                eq("New message"),
+                eq("a".repeat(120) + "…"));
+    }
+
+    @Test
+    void sendMessageNotificationFailureStillSucceeds() {
+        MentorshipPair pair = activePair();
+        when(pairRepository.findByIdAndParticipant(pair.getId(), STUDENT_ID)).thenReturn(Optional.of(pair));
+        when(messageRepository.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new RuntimeException("down")).when(notificationClient).notify(any(), any(), any(), any());
+
+        MessageResponse response = service.sendMessage(STUDENT_ID, pair.getId(), new SendMessageRequest("hello"));
+
+        assertThat(response.body()).isEqualTo("hello");
     }
 
     @Test

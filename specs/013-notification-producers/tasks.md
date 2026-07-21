@@ -1,0 +1,26 @@
+# Implementation Tasks: Notification Producers
+
+- [x] 1. Create `specs/013-notification-producers/plan.md`
+- [x] 2. Create `specs/013-notification-producers/research.md`
+- [x] 3. Create `specs/013-notification-producers/quickstart.md`
+- [ ] 4. challenge-service: add `NotificationClient`, `NotificationClientProperties`, and `RestClientConfig`
+- [ ] 5. challenge-service: add `application.yml` notification config
+- [ ] 6. challenge-service: wire `CHALLENGE_SCORED` notification in `ChallengeServiceImpl.scoreSubmission`
+- [ ] 7. challenge-service: add unit tests for notification happy and failure-isolation paths
+- [ ] 8. mentorship-service: add `NotificationClient`, `NotificationClientProperties`, and `RestClientConfig`
+- [ ] 9. mentorship-service: add `application.yml` notification config
+- [ ] 10. mentorship-service: wire request/accept/decline/message notifications in `MentorshipServiceImpl`
+- [ ] 11. mentorship-service: add unit tests for notification happy and failure-isolation paths
+- [ ] 12. matching-service: add `NotificationClient`, `NotificationClientProperties`, and `RestClientConfig`
+- [ ] 13. matching-service: add `application.yml` notification config
+- [ ] 14. matching-service: wire `OPPORTUNITY_MATCH` fan-out in `MatchingServiceImpl.postOpportunity`
+- [ ] 15. matching-service: add unit tests for notification happy and failure-isolation paths
+- [ ] 16. career-service: add `NotificationClient`, `NotificationClientProperties`, and `RestClientConfig`
+- [ ] 17. career-service: add `application.yml` notification config
+- [ ] 18. career-service: wire `ROADMAP_MILESTONE` notification in `CareerServiceImpl.completeMilestone`
+- [ ] 19. career-service: add unit tests for notification happy and failure-isolation paths
+- [ ] 20. Update `docker-compose.yml` env vars for producer services
+- [ ] 21. Update `.env.example` with `INTERNAL_SERVICE_TOKEN`
+- [ ] 22. Update `.github/workflows/ci.yml` env vars for producer tests
+- [ ] 23. Run backend verification for all touched services
+- [ ] 24. Update `specs/013-notification-producers/spec.md` status and agent context if needed

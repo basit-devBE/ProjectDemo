@@ -1,5 +1,6 @@
 package com.skillbridge.mentorship.service;
 
+import com.skillbridge.mentorship.client.NotificationClient;
 import com.skillbridge.mentorship.dto.request.SendMessageRequest;
 import com.skillbridge.mentorship.dto.request.SendRequestRequest;
 import com.skillbridge.mentorship.dto.request.UpsertProfileRequest;
@@ -22,6 +23,7 @@ import com.skillbridge.mentorship.exception.ProfileNotFoundException;
 import com.skillbridge.mentorship.exception.RequestAlreadyResolvedException;
 import com.skillbridge.mentorship.exception.RequestNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MentorshipServiceImpl implements MentorshipService {
 
     private final com.skillbridge.mentorship.repository.AlumniProfileRepository profileRepository;
@@ -41,6 +44,7 @@ public class MentorshipServiceImpl implements MentorshipService {
     private final com.skillbridge.mentorship.repository.MentorshipPairRepository pairRepository;
     private final com.skillbridge.mentorship.repository.MessageRepository messageRepository;
     private final AlumniSearchService searchService;
+    private final NotificationClient notificationClient;
 
     // ── US1: Alumni profile ─────────────────────────────────────────────
 
@@ -103,12 +107,25 @@ public class MentorshipServiceImpl implements MentorshipService {
         req.setAlumniId(target.getUserId());
         req.setMessage(trimToNull(request.message()));
 
+        MentorshipRequest saved;
         try {
-            return toRequestResponse(requestRepository.saveAndFlush(req));
+            saved = requestRepository.saveAndFlush(req);
         } catch (DataIntegrityViolationException e) {
             // race backstop: partial unique index on (student_id, alumni_id) WHERE PENDING
             throw new DuplicateRequestException("A pending request to this alumnus already exists");
         }
+
+        try {
+            notificationClient.notify(
+                    saved.getAlumniId(),
+                    "MENTORSHIP_REQUEST_RECEIVED",
+                    "New mentorship request",
+                    "A student has requested your mentorship.");
+        } catch (Exception e) {
+            log.warn("Failed to send mentorship request notification: {}", e.getMessage());
+        }
+
+        return toRequestResponse(saved);
     }
 
     @Override
@@ -154,7 +171,17 @@ public class MentorshipServiceImpl implements MentorshipService {
         pair.setStudentId(req.getStudentId());
         pair.setAlumniId(req.getAlumniId());
         pair.setRequestId(req.getId());
-        return toPairResponse(pairRepository.save(pair));
+        MentorshipPair saved = pairRepository.save(pair);
+        try {
+            notificationClient.notify(
+                    req.getStudentId(),
+                    "MENTORSHIP_REQUEST_ACCEPTED",
+                    "Request accepted",
+                    "Your mentorship request was accepted — you can start chatting now.");
+        } catch (Exception e) {
+            log.warn("Failed to send mentorship accepted notification: {}", e.getMessage());
+        }
+        return toPairResponse(saved);
     }
 
     @Override
@@ -163,7 +190,17 @@ public class MentorshipServiceImpl implements MentorshipService {
         MentorshipRequest req = findOwnedPendingRequest(alumniId, requestId);
         req.setStatus(RequestStatus.DECLINED);
         req.setRespondedAt(Instant.now());
-        return toRequestResponse(requestRepository.save(req));
+        MentorshipRequest saved = requestRepository.save(req);
+        try {
+            notificationClient.notify(
+                    req.getStudentId(),
+                    "MENTORSHIP_REQUEST_DECLINED",
+                    "Request declined",
+                    "Your mentorship request was declined. You can request another mentor anytime.");
+        } catch (Exception e) {
+            log.warn("Failed to send mentorship declined notification: {}", e.getMessage());
+        }
+        return toRequestResponse(saved);
     }
 
     private MentorshipRequest findOwnedPendingRequest(UUID alumniId, UUID requestId) {
@@ -228,7 +265,27 @@ public class MentorshipServiceImpl implements MentorshipService {
         message.setPair(pair);
         message.setSenderId(userId);
         message.setBody(request.body().trim());
-        return toMessageResponse(messageRepository.save(message));
+        Message saved = messageRepository.save(message);
+
+        UUID recipientId = pair.getStudentId().equals(userId) ? pair.getAlumniId() : pair.getStudentId();
+        try {
+            notificationClient.notify(
+                    recipientId,
+                    "MENTORSHIP_MESSAGE",
+                    "New message",
+                    preview(saved.getBody()));
+        } catch (Exception e) {
+            log.warn("Failed to send mentorship message notification: {}", e.getMessage());
+        }
+
+        return toMessageResponse(saved);
+    }
+
+    private String preview(String body) {
+        if (body == null || body.length() <= 120) {
+            return body;
+        }
+        return body.substring(0, 120) + "…";
     }
 
     private MentorshipPair findParticipantPair(UUID userId, UUID pairId) {
