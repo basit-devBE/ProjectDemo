@@ -9,8 +9,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { getUnreadCount } from '@/services/notification';
 import { useAuth } from '@/context/AuthContext';
 import { colors, typography, spacing, radius } from '@/constants/theme';
 import { getRoadmap } from '@/services/career';
@@ -67,6 +68,23 @@ export default function DashboardScreen() {
 
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [loadingRoadmap, setLoadingRoadmap] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchUnreadCount = useCallback(async () => {
+    if (!state.accessToken) return;
+    try {
+      const data = await getUnreadCount(state.accessToken);
+      setUnreadCount(data.unread);
+    } catch {
+      setUnreadCount(0);
+    }
+  }, [state.accessToken]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUnreadCount();
+    }, [fetchUnreadCount])
+  );
 
   const fetchRoadmap = useCallback(async () => {
     if (!state.accessToken || !state.user) { setLoadingRoadmap(false); return; }
@@ -103,8 +121,17 @@ export default function DashboardScreen() {
           </View>
           <Text style={styles.brandName}>SkillBridge</Text>
         </View>
-        <TouchableOpacity style={styles.headerBtn} accessibilityLabel="Notifications">
+        <TouchableOpacity
+          style={styles.headerBtn}
+          accessibilityLabel="Notifications"
+          onPress={() => router.push('./notifications')}
+        >
           <Ionicons name="notifications-outline" size={22} color={colors.primary} />
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -325,6 +352,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceContainerLow,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    ...typography.labelSm,
+    color: colors.onPrimary,
+    fontSize: 10,
   },
 
   scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxl + 24 },

@@ -43,7 +43,7 @@ SkillBridge AI uses **PostgreSQL 16**. Each microservice owns an isolated schema
 | matching-service | `matching` | opportunities, opportunity_skills, student_matches, applications |
 | challenge-service | `challenge` | challenges, submissions, leaderboard_entries |
 | mentorship-service | `mentorship` | alumni_profiles, mentorship_requests, mentorship_pairs, messages |
-| notification-service | `notification` | notifications, push_tokens, preferences |
+| notification-service | `notification` | notifications, push_tokens, notification_preferences |
 
 ---
 
@@ -450,22 +450,36 @@ Index `idx_messages_pair` on `(pair_id, sent_at)`.
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | id | UUID | PK | — |
-| user_id | UUID | NOT NULL | — |
-| type | VARCHAR(50) | NOT NULL | ROADMAP_MILESTONE, MATCH_FOUND, etc. |
+| user_id | UUID | NOT NULL | Recipient (JWT `sub`); not verified cross-service |
+| type | VARCHAR(50) | NOT NULL | `CHALLENGE_SCORED`, `MENTORSHIP_REQUEST_RECEIVED`, `MENTORSHIP_REQUEST_ACCEPTED`, `MENTORSHIP_REQUEST_DECLINED`, `MENTORSHIP_MESSAGE`, `OPPORTUNITY_MATCH`, `ROADMAP_MILESTONE`, `SYSTEM` |
 | title | VARCHAR(255) | NOT NULL | — |
-| body | TEXT | NOT NULL | — |
+| body | VARCHAR(2000) | NOT NULL | — |
 | read | BOOLEAN | NOT NULL, DEFAULT FALSE | — |
 | created_at | TIMESTAMPTZ | NOT NULL | — |
+
+Indexes `idx_notifications_user_created` on `(user_id, created_at DESC)` and partial index `idx_notifications_user_unread` on `(user_id) WHERE NOT read`.
 
 ### `notification.push_tokens`
 
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | id | UUID | PK | — |
-| user_id | UUID | NOT NULL | — |
-| expo_push_token | VARCHAR(255) | NOT NULL | — |
-| active | BOOLEAN | NOT NULL, DEFAULT TRUE | — |
-| registered_at | TIMESTAMPTZ | NOT NULL | — |
+| user_id | UUID | NOT NULL | Current owner; reassigned on cross-account registration |
+| token | VARCHAR(255) | NOT NULL, UNIQUE | The Expo push token string — device's identity |
+| active | BOOLEAN | NOT NULL, DEFAULT TRUE | Deactivated when Expo reports `DeviceNotRegistered` |
+| registered_at | TIMESTAMPTZ | NOT NULL | Refreshed on re-registration |
+
+Index `idx_push_tokens_user_active` on `(user_id, active)`.
+
+### `notification.notification_preferences`
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | UUID | PK | — |
+| user_id | UUID | NOT NULL, UNIQUE | — |
+| push_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE | Global push switch |
+| muted_types | JSONB | NOT NULL, DEFAULT '[]' | Set of muted `NotificationType` values |
+| updated_at | TIMESTAMPTZ | NOT NULL | Refreshed on every PUT (full replace) |
 
 ---
 

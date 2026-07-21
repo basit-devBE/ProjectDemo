@@ -30,6 +30,8 @@ jobs:
             path: backend/challenge-service
           - service: mentorship-service
             path: backend/mentorship-service
+          - service: notification-service
+            path: backend/notification-service
 
     steps:
       - uses: actions/checkout@v4

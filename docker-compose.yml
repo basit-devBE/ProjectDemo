@@ -153,6 +153,26 @@ services:
       postgres:
         condition: service_healthy
 
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+      network: host
+    container_name: skillbridge-notification
+    ports:
+      - "8009:8009"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      EXPO_PUSH_URL: ${EXPO_PUSH_URL:-https://exp.host/--/api/v2/push/send}
+      SERVER_PORT: 8009
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   matching-service:
     build:
       context: ./backend/matching-service
@@ -208,8 +228,9 @@ services:
       - matching-service
       - challenge-service
       - mentorship-service
+      - notification-service
 
 volumes:
   postgres_data:
   skillgap_uploads:
-  whisper-model-cache:
+  # whisper-model-cache: disabled alongside whisper-service above
